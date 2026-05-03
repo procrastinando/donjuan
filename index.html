@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>DonJuan VPN</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={darkMode:'class',theme:{extend:{colors:{darkBg:'#0f172a',darkCard:'#1e293b'}}}}</script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<style>body{background:#0f172a;color:#f8fafc;font-family:'Inter',sans-serif}[x-cloak]{display:none!important}
+.notif{position:fixed;top:1rem;left:50%;transform:translateX(-50%);z-index:999;padding:.75rem 1.25rem;border-radius:.5rem;font-size:.875rem;max-width:24rem;animation:fadeIn .3s}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body class="antialiased min-h-screen p-4 md:p-8" x-data="app()">
+
+<!-- Notification -->
+<div x-show="notif" x-cloak class="notif" :class="notifType==='error'?'bg-red-600':'bg-blue-600'" x-text="notif" x-transition></div>
+
+<div class="max-w-4xl mx-auto space-y-6">
+<div class="flex items-center justify-between mb-2">
+  <a href="https://donjuanvpn.com" target="_blank" class="text-3xl font-bold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent hover:from-blue-300 hover:to-indigo-400 transition-colors">DonJuan VPN</a>
+  <div class="flex items-center space-x-4">
+    <button @click="forceCleanup()" class="text-xs bg-slate-600 hover:bg-slate-500 text-white px-2 py-1 rounded shadow" x-text="t('restart')"></button>
+    <div class="flex items-center space-x-2">
+      <div class="w-3 h-3 rounded-full" :class="running?'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]':'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]'"></div>
+      <span class="text-sm font-medium" x-text="running?t('running'):t('stopped')"></span>
+    </div>
+  </div>
+</div>
+
+<div class="flex flex-col items-center space-y-4 mb-6">
+  <button @click="running?stopProxy():startProxy()" class="px-8 py-3 text-white font-bold text-lg rounded-full shadow-lg transition-all transform hover:scale-[1.05] active:scale-95" :class="running?'bg-gradient-to-r from-yellow-600 to-orange-600':'bg-gradient-to-r from-blue-600 to-indigo-600'" x-text="running?t('stopProxy'):t('startProxy')"></button>
+</div>
+
+<div class="flex space-x-1 bg-darkCard p-1 rounded-lg">
+  <button @click="tab='servers'" :class="tab==='servers'?'bg-blue-600 text-white':'text-slate-400'" class="flex-1 py-2 text-sm font-medium rounded-md transition-colors" x-text="t('servers')"></button>
+  <button @click="tab='settings'" :class="tab==='settings'?'bg-blue-600 text-white':'text-slate-400'" class="flex-1 py-2 text-sm font-medium rounded-md transition-colors" x-text="t('settings')"></button>
+  <button @click="tab='routing'" :class="tab==='routing'?'bg-blue-600 text-white':'text-slate-400'" class="flex-1 py-2 text-sm font-medium rounded-md transition-colors" x-text="t('routing')"></button>
+</div>
+
+<!-- Servers -->
+<div x-show="tab==='servers'" x-cloak class="space-y-4">
+  <div class="flex items-center space-x-2">
+    <button @click="autoSelect()" :disabled="autoTesting" class="px-3 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 rounded-md text-white font-medium border border-slate-600" :class="autoTesting?'opacity-50 cursor-wait':''"><span x-show="autoTesting" class="inline-block animate-spin mr-1">⟳</span><span x-text="autoTesting?t('testing'):t('autoConnect')"></span></button>
+    <button @click="testLatency()" :disabled="testing" class="px-3 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 rounded-md text-white font-medium border border-slate-600" :class="testing?'opacity-50 cursor-wait':''"><span x-show="testing" class="inline-block animate-spin mr-1">⟳</span><span x-text="testing?t('testing'):t('test')"></span></button>
+    <div class="flex-1"></div>
+    <button @click="showLogs=true" class="px-3 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 rounded-md text-white font-medium border border-slate-600" x-text="t('showLogs')"></button>
+  </div>
+  <div class="bg-darkCard rounded-xl p-6 shadow-lg border border-slate-700/50">
+    <div class="overflow-x-auto rounded-lg border border-slate-700/50">
+      <table class="w-full text-sm text-left">
+        <thead class="text-xs uppercase bg-slate-800 text-slate-400">
+          <tr><th class="px-4 py-3" x-text="t('name')"></th><th class="px-4 py-3" x-text="t('protocol')"></th><th class="px-4 py-3" x-text="t('domain')"></th><th class="px-4 py-3 text-right" x-text="t('latency')"></th><th class="px-4 py-3 w-10"></th></tr>
+        </thead>
+        <tbody>
+          <template x-for="node in data.nodes" :key="node.id">
+            <tr class="bg-slate-800/30 border-b border-slate-700/50 hover:bg-slate-800/80 cursor-pointer" @click="selectedNode=node.id; saveData().then(()=>{if(!running)startProxy()})">
+              <td class="px-4 py-3 font-medium flex items-center">
+                <div class="w-2 h-2 rounded-full mr-2" :class="selectedNode===node.id?'bg-green-500':'bg-slate-600'"></div>
+                <span x-text="node.remarks"></span>
+              </td>
+              <td class="px-4 py-3 text-slate-300 uppercase text-xs" x-text="node.type"></td>
+              <td class="px-4 py-3 text-slate-400" x-text="node.domain||'-'"></td>
+              <td class="px-4 py-3 text-right font-mono" x-text="node.latency?node.latency+'ms':'-'"></td>
+              <td class="px-4 py-3 text-right">
+                <button @click.stop="editNode=JSON.parse(JSON.stringify(node));showEditModal=true" class="text-slate-400 hover:text-blue-400" :title="t('edit')">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                </button>
+              </td>
+            </tr>
+          </template>
+          <tr x-show="!data.nodes||data.nodes.length===0"><td colspan="5" class="px-4 py-8 text-center text-slate-500" x-text="t('noServers')"></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="flex justify-center mt-4"><button @click="showAddModal=true" class="text-sm bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 px-4 py-2 rounded-lg font-medium" x-text="'↕ '+t('addConfig')"></button></div>
+  </div>
+</div>
+
+<!-- Settings -->
+<div x-show="tab==='settings'" x-cloak class="space-y-6">
+  <div class="bg-darkCard rounded-xl p-6 shadow-lg border border-slate-700/50">
+    <h2 class="text-xl font-semibold mb-6" x-text="t('coreSettings')"></h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <template x-for="(value,key) in data.settings" :key="key">
+        <template x-if="key!=='language'">
+        <label class="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700/50 hover:bg-slate-800 cursor-pointer">
+          <div class="flex items-center space-x-2" :title="getSettingHelp(key)">
+            <span class="font-medium capitalize text-slate-200" x-text="getSettingLabel(key)"></span>
+            <svg class="w-4 h-4 text-slate-500 hover:text-slate-300 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <div class="relative inline-block w-12 mr-2 align-middle select-none">
+            <input type="checkbox" x-model="data.settings[key]" @change="saveData()" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200" :class="data.settings[key]?'translate-x-6 border-blue-500':'translate-x-0 border-slate-400'"/>
+            <label class="toggle-label block overflow-hidden h-6 rounded-full cursor-pointer" :class="data.settings[key]?'bg-blue-500':'bg-slate-400'"></label>
+          </div>
+        </label>
+        </template>
+      </template>
+    </div>
+  </div>
+  <div class="bg-darkCard rounded-xl p-6 shadow-lg border border-slate-700/50">
+    <h2 class="text-xl font-semibold mb-4" x-text="t('panel')"></h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <p class="text-sm text-slate-400" x-show="sysinfo.installed"><span x-text="t('currentVersion')"></span> <span class="text-white font-mono" x-text="sysinfo.version"></span></p>
+        <p class="text-sm text-slate-400" x-show="sysinfo.installed&&sysinfo.latestVersion"><span x-text="t('latestVersion')"></span> <span class="text-white font-mono" x-text="sysinfo.latestVersion"></span></p>
+        <p class="text-sm text-red-400" x-show="!sysinfo.installed" x-text="t('notInstalled')"></p>
+        <p class="text-sm text-slate-500 mt-1"><span x-text="t('os')"></span> <span x-text="sysinfo.os" class="text-white capitalize"></span></p>
+        <div class="mt-2">
+          <select x-model="data.settings.language" @change="saveData()" class="bg-slate-800 border border-slate-600 rounded text-sm text-white px-2 py-1.5 focus:outline-none focus:border-blue-500">
+            <option value="en">English</option>
+            <option value="es">Español</option>
+            <option value="zh">中文</option>
+            <option value="ru">Русский</option>
+          </select>
+        </div>
+        <button x-show="sysinfo.os==='other'" @click="window.open('https://sing-box.sagernet.org/installation/package-manager/','_blank')" class="mt-4 px-3 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 rounded text-white" x-text="t('installGuide')"></button>
+      </div>
+      <div class="space-y-3" x-show="sysinfo.os!=='other'">
+        <div class="flex items-center space-x-2">
+          <input type="text" x-model="sysinfo.targetVersion" :placeholder="t('versionPlaceholder')" class="w-32 bg-slate-800 text-white text-sm rounded border border-slate-600 px-2 py-1.5">
+          <button @click="installSingbox()" :disabled="installing" class="px-3 py-1.5 text-sm rounded text-white" :class="installing?'bg-gray-500 cursor-wait':'bg-green-600 hover:bg-green-500'">
+            <span x-show="installing" class="inline-block animate-spin mr-1">⟳</span>
+            <span x-text="installing?t('working'):t('updateVersion')"></span>
+          </button>
+        </div>
+        <div class="flex items-center space-x-2">
+          <input type="number" x-model.number="data.port" :placeholder="t('port')" class="w-32 bg-slate-800 text-white text-sm rounded border border-slate-600 px-2 py-1.5">
+          <button @click="saveData(); showNotif(t('portSaved'))" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded" x-text="t('updatePort')"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="flex justify-center"><button @click="showConfigModal=true;loadConfig()" class="text-sm bg-slate-700/50 text-slate-300 hover:bg-slate-600/50 hover:text-white px-4 py-2 rounded-lg font-medium" x-text="t('seeConfig')"></button></div>
+</div>
+
+<!-- Routing -->
+<div x-show="tab==='routing'" x-cloak class="space-y-6">
+  <div class="bg-darkCard rounded-xl p-6 shadow-lg border border-slate-700/50">
+    <h2 class="text-xl font-semibold mb-4" x-text="t('geositeCategories')"></h2>
+    <div class="space-y-2">
+      <template x-for="cat in geositeCategories" :key="cat.name">
+        <div class="border border-slate-700/80 rounded-lg overflow-hidden bg-slate-800/20">
+          <button @click="openCategory=openCategory===cat.name?null:cat.name" class="w-full text-left px-4 py-3 bg-slate-800/80 hover:bg-slate-700 text-sm font-medium text-slate-200 flex justify-between items-center transition-colors">
+            <span x-text="t('cat_'+cat.name) || cat.name"></span>
+            <svg class="w-4 h-4 transform transition-transform" :class="openCategory===cat.name?'rotate-180':''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div x-show="openCategory===cat.name" x-collapse class="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <template x-for="item in cat.items" :key="item">
+              <div class="flex justify-between items-center p-2.5 bg-slate-800/60 rounded border border-slate-700/50 hover:bg-slate-700/50 transition-colors">
+                <div class="flex items-center space-x-2" :title="getGeositeHelp(item)">
+                  <span class="text-xs font-mono text-slate-300" x-text="item"></span>
+                  <svg class="w-3 h-3 text-slate-500 hover:text-slate-300 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
+                <select x-model="data.routing.geositeRules[item]" @change="toggleGeositeRule(item, data.routing.geositeRules[item])" class="bg-slate-900 border border-slate-600 rounded text-xs text-white px-2 py-1 focus:outline-none focus:border-blue-500">
+                  <option value="proxy" x-text="t('proxy')"></option>
+                  <option value="direct" x-text="t('direct')"></option>
+                  <option value="block" x-text="t('block')"></option>
+                </select>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+  <div class="bg-darkCard rounded-xl p-6 shadow-lg border border-slate-700/50">
+    <h2 class="text-xl font-semibold mb-4" x-text="t('customRules')"></h2>
+    <div class="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-2 mb-4">
+      <select x-model="newRule.type" class="w-full md:w-28 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white"><option>Domain</option><option>IP</option><option>Keyword</option></select>
+      <input type="text" x-model="newRule.value" :placeholder="t('valuePlaceholder')" class="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white">
+      <select x-model="newRule.action" class="w-full md:w-28 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white"><option value="Proxy" x-text="t('proxy')"></option><option value="Direct" x-text="t('direct')"></option><option value="Block" x-text="t('block')"></option></select>
+      <input type="text" x-model="newRule.source" :placeholder="t('sourcePlaceholder')" class="w-full md:w-36 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white">
+      <button @click="addRule()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium" x-text="t('add')"></button>
+    </div>
+    <div class="overflow-x-auto rounded-lg border border-slate-700/50">
+      <table class="w-full text-sm text-left">
+        <thead class="text-xs uppercase bg-slate-800 text-slate-400">
+          <tr><th class="px-4 py-3" x-text="t('type')"></th><th class="px-4 py-3" x-text="t('value')"></th><th class="px-4 py-3" x-text="t('action')"></th><th class="px-4 py-3" x-text="t('source')"></th><th class="px-4 py-3 w-10"></th></tr>
+        </thead>
+        <tbody>
+          <template x-for="(rule,i) in data.routing.customRules" :key="i">
+            <tr class="bg-slate-800/30 border-b border-slate-700/50 hover:bg-slate-800/80">
+              <td class="px-4 py-3" x-text="rule.type"></td>
+              <td class="px-4 py-3 font-mono text-xs text-blue-400" x-text="rule.value"></td>
+              <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs font-medium" :class="{'bg-blue-900/50 text-blue-300':rule.action==='Proxy','bg-green-900/50 text-green-300':rule.action==='Direct','bg-red-900/50 text-red-300':rule.action==='Block'}" x-text="t(rule.action.toLowerCase())"></span></td>
+              <td class="px-4 py-3 text-xs text-slate-500" x-text="rule.source||'-'"></td>
+              <td class="px-4 py-3 text-right">
+                <button @click="deleteRule(i)" class="text-slate-400 hover:text-red-500">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
+              </td>
+            </tr>
+          </template>
+          <tr x-show="!data.routing.customRules||data.routing.customRules.length===0"><td colspan="5" class="px-4 py-8 text-center text-slate-500" x-text="t('noCustomRules')"></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- Logs Modal -->
+<div x-show="showLogs" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+  <div class="bg-darkCard rounded-xl border border-slate-700 w-full max-w-4xl h-[80vh] flex flex-col shadow-2xl overflow-hidden">
+    <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
+      <h3 class="text-xl font-semibold" x-text="t('liveLogs')"></h3>
+      <div class="flex space-x-3 items-center">
+        <label class="flex items-center space-x-1.5 cursor-pointer text-xs text-slate-300">
+          <input type="checkbox" x-model="data.settings.saveLogs" @change="saveData()" class="rounded bg-slate-700 border-slate-600 text-blue-500 focus:ring-blue-500">
+          <span x-text="t('saveLogs')"></span>
+        </label>
+        <button @click="clearLogFiles()" class="px-3 py-1 text-xs bg-red-700 hover:bg-red-600 rounded text-white" x-text="t('clearLogs')"></button>
+        <button @click="fetchLogs()" class="px-3 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded text-white" x-text="t('refresh')"></button>
+        <button @click="showLogs=false" class="text-slate-400 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+      </div>
+    </div>
+    <div id="logContainer" class="flex-1 overflow-auto p-0 bg-[#0B0F19]">
+      <table class="w-full text-xs text-left">
+        <thead class="text-xs uppercase bg-slate-800 text-slate-400 sticky top-0">
+          <tr>
+            <th class="px-3 py-2" x-text="t('time')"></th>
+            <th class="px-3 py-2" x-text="t('source')"></th>
+            <th class="px-3 py-2">
+              <div class="flex items-center space-x-1">
+                <span x-text="t('dir')"></span>
+                <select x-model="logFilters.dir" class="bg-slate-700 text-white rounded outline-none cursor-pointer"><option value="" x-text="t('all')"></option><template x-for="v in [...new Set(parsedLogs.map(l=>l.dir).filter(Boolean))]" :key="v"><option :value="v" x-text="v"></option></template></select>
+              </div>
+            </th>
+            <th class="px-3 py-2">
+              <div class="flex items-center space-x-1">
+                <span x-text="t('rule')"></span>
+                <select x-model="logFilters.protocol" class="bg-slate-700 text-white rounded outline-none cursor-pointer"><option value="" x-text="t('all')"></option><template x-for="v in [...new Set(parsedLogs.map(l=>l.protocol).filter(Boolean))]" :key="v"><option :value="v" x-text="v"></option></template></select>
+              </div>
+            </th>
+            <th class="px-3 py-2">Domain/IP</th>
+          </tr>
+        </thead>
+        <tbody class="font-mono text-slate-300">
+          <template x-for="(entry,i) in filteredLogs" :key="i">
+            <tr class="border-b border-slate-800/50 hover:bg-slate-800/30">
+              <td class="px-3 py-1.5 text-slate-500 whitespace-nowrap" x-text="entry.time"></td>
+              <td class="px-3 py-1.5 text-slate-500" x-text="entry.source"></td>
+              <td class="px-3 py-1.5" x-text="entry.dir"></td>
+              <td class="px-3 py-1.5 text-blue-400" x-text="entry.protocol"></td>
+              <td class="px-3 py-1.5 text-blue-300 break-all" x-text="entry.domain"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+      <div x-show="parsedLogs.length===0" class="text-center text-slate-500 mt-8 p-4" x-text="t('noLogs')"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Config Modal -->
+<div x-show="showAddModal" x-cloak class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+  <div class="bg-darkCard rounded-xl border border-slate-700 w-full max-w-md p-6 shadow-2xl">
+    <h3 class="text-xl font-semibold mb-4" x-text="t('addConfig')"></h3>
+    <input type="text" x-model="newNodeRemarks" :placeholder="t('nameOptional')" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2 text-sm">
+    <textarea x-model="newNodeUrl" rows="3" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 font-mono text-sm" placeholder="vless://... hy2://... trojan://..."></textarea>
+    <div class="flex justify-end space-x-3">
+      <button @click="showAddModal=false;newNodeUrl='';newNodeRemarks=''" class="px-4 py-2 text-slate-400 hover:text-white text-sm" x-text="t('cancel')"></button>
+      <button @click="addNode()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium" x-text="t('save')"></button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Config Modal -->
+<div x-show="showEditModal" x-cloak class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" @click.self="showEditModal=false;editNode=null">
+  <div class="bg-darkCard rounded-xl border border-slate-700 w-full max-w-md p-6 shadow-2xl">
+    <h3 class="text-xl font-semibold mb-4" x-text="t('editConfig')"></h3>
+    <input type="text" x-model="editNode.remarks" :placeholder="t('name')" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2 text-sm">
+    <textarea x-model="editNode.url" rows="3" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 font-mono text-sm" placeholder="vless://... hy2://... trojan://..."></textarea>
+    <div class="flex justify-between">
+      <button @click="deleteNode(editNode.id);showEditModal=false;editNode=null" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-medium" x-text="t('delete')"></button>
+      <div class="flex space-x-3">
+        <button @click="showEditModal=false;editNode=null" class="px-4 py-2 text-slate-400 hover:text-white text-sm" x-text="t('cancel')"></button>
+        <button @click="saveEditNode()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium" x-text="t('save')"></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Config Modal -->
+<div x-show="showConfigModal" x-cloak class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" @click.self="showConfigModal=false">
+  <div class="bg-darkCard rounded-xl border border-slate-700 w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl overflow-hidden">
+    <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
+      <h3 class="text-xl font-semibold" x-text="t('configuration')"></h3>
+      <button @click="showConfigModal=false" class="text-slate-400 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+    </div>
+    <div class="flex-1 overflow-auto p-4 bg-[#0B0F19]">
+      <div x-show="configJson" class="bg-slate-800 rounded-lg p-4 border border-slate-700">
+        <pre class="text-xs text-slate-300 font-mono whitespace-pre-wrap" x-text="configJson"></pre>
+      </div>
+      <p x-show="!configJson" class="text-sm text-slate-500 text-center py-8" x-text="t('noConfig')"></p>
+    </div>
+    <div class="p-4 border-t border-slate-700">
+      <p class="text-xs text-red-400/70 mb-3 text-center" x-text="t('resetWarning')"></p>
+      <div class="flex justify-center space-x-3">
+        <button @click="showConfigModal=false;showResetConfirm=true" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-medium" x-text="t('deleteEverything')"></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Reset Confirm Modal -->
+<div x-show="showResetConfirm" x-cloak class="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm">
+  <div class="bg-darkCard rounded-xl border border-red-700 w-full max-w-md p-6 shadow-2xl">
+    <h3 class="text-xl font-semibold mb-4 text-red-400" x-text="t('areYouSure')"></h3>
+    <p class="text-sm text-slate-300 mb-2" x-text="t('willDelete')"></p>
+    <ul class="text-sm text-slate-400 mb-4 list-disc list-inside">
+      <li>data.json (<span x-text="t('allConfigs')"></span>)</li>
+      <li>config.json (sing-box)</li>
+      <li>data/ (<span x-text="t('geodataLogs')"></span>)</li>
+    </ul>
+    <p class="text-sm text-red-400 font-medium mb-4" x-text="t('cannotUndo')"></p>
+    <div class="flex justify-end space-x-3">
+      <button @click="showResetConfirm=false" class="px-4 py-2 text-slate-400 hover:text-white text-sm" x-text="t('cancel')"></button>
+      <button @click="resetEverything()" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-medium" x-text="t('deleteEverything')"></button>
+    </div>
+  </div>
+</div>
+
+<script>window.__CONFIG_JSON__=/*CONFIG_JSON*/;</script>
+<script>
+const i18n={
+en:{
+restart:'Restart',running:'Running',stopped:'Stopped',startProxy:'START PROXY',stopProxy:'STOP PROXY',
+servers:'Servers',settings:'Settings',routing:'Routing',
+autoConnect:'Auto Connect',test:'Test',testing:'Testing...',showLogs:'Show Logs',
+name:'Name',protocol:'Protocol',domain:'Domain',latency:'Latency',
+noServers:'No servers.',addConfig:'Add Configuration',edit:'Edit',
+coreSettings:'Core Settings',panel:'Panel',
+currentVersion:'Current Version:',latestVersion:'Latest Version:',notInstalled:'sing-box is not installed',
+os:'OS:',installGuide:'Install Guide',versionPlaceholder:'Version (e.g. 1.13.11)',
+working:'Working...',updateVersion:'Update Version',port:'Port',updatePort:'Update Port',
+portSaved:'Port saved. Restart DonJuan VPN manually to apply.',
+seeConfig:'See Configuration',
+geositeCategories:'Geosite Categories',customRules:'Custom Rules',
+type:'Type',value:'Value',valuePlaceholder:'Value (e.g. netflix.com)',action:'Action',source:'Source',sourcePlaceholder:'Source (optional)',
+add:'Add',proxy:'Proxy',direct:'Direct',block:'Block',noCustomRules:'No custom rules.',
+liveLogs:'Live Logs',saveLogs:'Save logs',clearLogs:'Clear logs',refresh:'Refresh',
+time:'Time',source:'Source',dir:'Dir',rule:'Rule',all:'All',noLogs:'No logs yet.',
+nameOptional:'Name (optional)',cancel:'Cancel',save:'Save',delete:'Delete',
+editConfig:'Edit Configuration',configuration:'Configuration',noConfig:'No configuration file found. Start the proxy to generate one.',
+resetWarning:'This will reset DonJuan. All data will be permanently deleted.',
+deleteEverything:'Delete Everything',areYouSure:'Are you absolutely sure?',
+willDelete:'This will permanently delete:',allConfigs:'all server configurations',geodataLogs:'geodata, logs, cache',
+cannotUndo:'This cannot be undone. DonJuan VPN will restart with a clean state.',
+proxyStarted:'Proxy started',proxyStopped:'Proxy stopped',failedStart:'Failed to start proxy',
+applyingChanges:'Applying changes...',serverAdded:'Server added: ',configUpdated:'Configuration updated',
+latencyTestDone:'Latency test done',testingAll:'Testing all servers...',
+connectedTo:'Connected to ',noServer:'No server available',
+cleaningUp:'Cleaning up...',cleanupDone:'Cleanup done. Config reloaded.',
+installing:'Installing/updating sing-box...',installed:'sing-box installed successfully!',
+installFailed:'Install failed: ',installError:'Install error: ',
+downloadingGeo:'Downloading GeoIP data for ',downloadingGeosite:'Downloading Geosite data for ',
+ruleAdded:'Rule added',logFilesCleared:'Log files cleared',failedClear:'Failed to clear logs',
+unsupportedProtocol:'Unsupported protocol. Supported: vless, hy2, trojan',
+unsupportedTransport:'Transport not supported',
+unsupportedTransportMsg:' is not supported. Supported: none, tcp, grpc, httpupgrade',
+node:'Node ',
+'cat_Geographic & TLD':'Geographic & TLD','cat_Ad-Blocking':'Ad-Blocking','cat_Regional Content':'Regional Content',
+'cat_Financial':'Financial','cat_Media & Entertainment':'Media & Entertainment','cat_Gaming':'Gaming',
+'cat_Tech & Dev':'Tech & Dev','cat_Communication & Social':'Communication & Social',
+'cat_E-Commerce':'E-Commerce','cat_Infrastructure':'Infrastructure',
+help_ipv6:'Enable IPv6 routing. Only enable if your ISP supports IPv6 natively.',
+help_fakeIP:'Use FakeIP for DNS resolution. Highly recommended for faster DNS response and routing.',
+help_dnsLeaks:'Prevent DNS leaks by blocking external DNS queries. Recommended: ON.',
+help_routeOnly:'Only apply routing rules without creating a TUN interface. Advanced users only.',
+help_allowInsecure:'Allow insecure connections (skips TLS verification). Often needed for self-signed servers.',
+help_tun:'Create a TUN network interface to capture all device traffic. Required for global proxy.',
+help_sniffing:'Inspect traffic to detect actual domain names (SNI). Essential for domain-based routing.',
+help_localNetwork:'Bypass proxy for local network IPs (192.168.x.x, 10.x.x.x). Keeps LAN accessible.',
+help_saveLogs:'Save log files to disk (data/*.log). When OFF, logs are only kept in memory.',
+'geo_geolocation-cn':'Domains hosted in mainland China',
+'geo_geolocation-!cn':'Domains NOT hosted in mainland China (overseas)',
+'geo_tld-cn':'Domains under .cn and Chinese TLDs',
+'geo_tld-!cn':'Domains under non-Chinese TLDs',
+'geo_tld-ru':'Domains under Russian TLDs',
+'geo_tld-opennic':'Domains under OpenNIC TLDs',
+'geo_category-ads':'Common advertising domains','geo_category-ads-all':'Comprehensive ad domain list across all sources',
+'geo_category-ads-ir':'Iranian ad domains','geo_category-ir':'Iranian domains','geo_category-ru':'Russian domains',
+'geo_category-finance':'General financial and banking domains','geo_category-bank-cn':'Chinese banking domains',
+'geo_category-bank-ru':'Russian banking domains','geo_category-cryptocurrency':'Cryptocurrency and exchange domains',
+'geo_category-media':'General media and streaming domains','geo_category-media-cn':'Chinese media domains',
+'geo_category-entertainment':'General entertainment domains','geo_category-porn':'Adult content domains',
+'geo_category-acg':'Anime, Comic, and Game domains','geo_category-games':'General gaming domains',
+'geo_category-games-cn':'Chinese gaming domains','geo_category-enhance-gaming':'Game acceleration/booster domains',
+'geo_category-dev':'Developer and programming domains','geo_category-dev-cn':'Chinese developer domains',
+'geo_category-doh':'DNS-over-HTTPS domains','geo_category-proxy-tunnels':'Proxy and tunnel service domains',
+'geo_category-communication':'Communication and messaging','geo_category-social-media-cn':'Chinese social media',
+'geo_category-forums':'Forum and community domains','geo_category-ecommerce':'E-commerce domains',
+'geo_category-ecommerce-ru':'Russian e-commerce domains','geo_category-vpnservices':'VPN service domains',
+'geo_category-anticensorship':'Anti-censorship tool domains','geo_category-speedtest':'Speed test domains',
+downloadFailed:'Download failed',
+},
+es:{
+restart:'Reiniciar',running:'Activo',stopped:'Detenido',startProxy:'INICIAR PROXY',stopProxy:'DETENER PROXY',
+servers:'Servidores',settings:'Ajustes',routing:'Enrutamiento',
+autoConnect:'Auto Conectar',test:'Probar',testing:'Probando...',showLogs:'Ver Logs',
+name:'Nombre',protocol:'Protocolo',domain:'Dominio',latency:'Latencia',
+noServers:'Sin servidores.',addConfig:'Agregar Configuración',edit:'Editar',
+coreSettings:'Ajustes Core',panel:'Panel',
+currentVersion:'Versión actual:',latestVersion:'Última versión:',notInstalled:'sing-box no está instalado',
+os:'SO:',installGuide:'Guía de instalación',versionPlaceholder:'Versión (ej. 1.13.11)',
+working:'Trabajando...',updateVersion:'Actualizar',port:'Puerto',updatePort:'Actualizar Puerto',
+portSaved:'Puerto guardado. Reinicie DonJuan VPN para aplicar.',
+seeConfig:'Ver Configuración',
+geositeCategories:'Categorías Geosite',customRules:'Reglas Personalizadas',
+type:'Tipo',value:'Valor',valuePlaceholder:'Valor (ej. netflix.com)',action:'Acción',source:'Origen',sourcePlaceholder:'Origen (opcional)',
+add:'Agregar',proxy:'Proxy',direct:'Directo',block:'Bloquear',noCustomRules:'Sin reglas personalizadas.',
+liveLogs:'Logs en Vivo',saveLogs:'Guardar logs',clearLogs:'Limpiar logs',refresh:'Actualizar',
+time:'Hora',source:'Origen',dir:'Dir',rule:'Regla',all:'Todo',noLogs:'Sin logs aún.',
+nameOptional:'Nombre (opcional)',cancel:'Cancelar',save:'Guardar',delete:'Eliminar',
+editConfig:'Editar Configuración',configuration:'Configuración',noConfig:'Archivo de configuración no encontrado. Inicie el proxy para generar uno.',
+resetWarning:'Esto reiniciará DonJuan. Todos los datos serán eliminados permanentemente.',
+deleteEverything:'Eliminar Todo',areYouSure:'¿Está absolutamente seguro?',
+willDelete:'Esto eliminará permanentemente:',allConfigs:'todas las configuraciones de servidor',geodataLogs:'geodatos, logs, caché',
+cannotUndo:'Esto no se puede deshacer. DonJuan VPN se reiniciará con un estado limpio.',
+proxyStarted:'Proxy iniciado',proxyStopped:'Proxy detenido',failedStart:'Error al iniciar proxy',
+applyingChanges:'Aplicando cambios...',serverAdded:'Servidor agregado: ',configUpdated:'Configuración actualizada',
+latencyTestDone:'Prueba de latencia completada',testingAll:'Probando todos los servidores...',
+connectedTo:'Conectado a ',noServer:'Sin servidor disponible',
+cleaningUp:'Limpiando...',cleanupDone:'Limpieza completada. Configuración recargada.',
+installing:'Instalando/actualizando sing-box...',installed:'¡sing-box instalado correctamente!',
+installFailed:'Error de instalación: ',installError:'Error de instalación: ',
+downloadingGeo:'Descargando datos GeoIP para ',downloadingGeosite:'Descargando datos Geosite para ',
+ruleAdded:'Regla agregada',logFilesCleared:'Archivos de log eliminados',failedClear:'Error al limpiar logs',
+unsupportedProtocol:'Protocolo no soportado. Soportados: vless, hy2, trojan',
+unsupportedTransport:'Transporte no soportado',
+unsupportedTransportMsg:' no está soportado. Soportados: none, tcp, grpc, httpupgrade',
+node:'Nodo ',
+'cat_Geographic & TLD':'Geográfico y TLD','cat_Ad-Blocking':'Bloqueo de Anuncios','cat_Regional Content':'Contenido Regional',
+'cat_Financial':'Financiero','cat_Media & Entertainment':'Medios y Entretenimiento','cat_Gaming':'Juegos',
+'cat_Tech & Dev':'Tecnología y Desarrollo','cat_Communication & Social':'Comunicación y Social',
+'cat_E-Commerce':'Comercio Electrónico','cat_Infrastructure':'Infraestructura',
+help_ipv6:'Habilitar enrutamiento IPv6. Solo habilitar si su ISP soporta IPv6 nativamente.',
+help_fakeIP:'Usar FakeIP para resolución DNS. Muy recomendado para respuesta DNS más rápida.',
+help_dnsLeaks:'Prevenir fugas DNS bloqueando consultas externas. Recomendado: ON.',
+help_routeOnly:'Solo aplicar reglas de enrutamiento sin crear interfaz TUN. Solo usuarios avanzados.',
+help_allowInsecure:'Permitir conexiones inseguras (omite verificación TLS). Necesario para servidores self-signed.',
+help_tun:'Crear interfaz TUN para capturar todo el tráfico. Requerido para proxy global.',
+help_sniffing:'Inspeccionar tráfico para detectar nombres de dominio reales (SNI). Esencial para enrutamiento por dominio.',
+help_localNetwork:'Omitir proxy para IPs de red local. Mantiene la LAN accesible.',
+help_saveLogs:'Guardar archivos de log en disco (data/*.log). Cuando está OFF, los logs solo se guardan en memoria.',
+'geo_geolocation-cn':'Dominios alojados en China continental','geo_geolocation-!cn':'Dominios NO alojados en China continental',
+'geo_tld-cn':'Dominios bajo .cn y TLDs chinos','geo_tld-ru':'Dominios bajo TLDs rusos','geo_tld-opennic':'Dominios bajo TLDs OpenNIC',
+'geo_category-ads':'Dominios de publicidad común','geo_category-ads-all':'Lista integral de dominios de anuncios',
+'geo_category-ads-ir':'Dominios de anuncios iraníes','geo_category-ir':'Dominios iraníes','geo_category-ru':'Dominios rusos',
+'geo_category-finance':'Dominios financieros y bancarios','geo_category-bank-cn':'Dominios bancarios chinos',
+'geo_category-bank-ru':'Dominios bancarios rusos','geo_category-cryptocurrency':'Dominios de criptomonedas',
+'geo_category-media':'Dominios de medios y streaming','geo_category-media-cn':'Dominios de medios chinos',
+'geo_category-entertainment':'Dominios de entretenimiento','geo_category-porn':'Dominios de contenido adulto',
+'geo_category-acg':'Dominios de Anime, Cómic y Juegos','geo_category-games':'Dominios de juegos',
+'geo_category-games-cn':'Dominios de juegos chinos','geo_category-enhance-gaming':'Dominios de aceleración de juegos',
+'geo_category-dev':'Dominios de desarrollo y programación','geo_category-dev-cn':'Dominios de desarrolladores chinos',
+'geo_category-doh':'Dominios DNS-over-HTTPS','geo_category-proxy-tunnels':'Dominios de proxy y túneles',
+'geo_category-communication':'Comunicación y mensajería','geo_category-social-media-cn':'Redes sociales chinas',
+'geo_category-forums':'Dominios de foros y comunidades','geo_category-ecommerce':'Dominios de comercio electrónico',
+'geo_category-ecommerce-ru':'Dominios de comercio electrónico ruso','geo_category-vpnservices':'Dominios de servicios VPN',
+'geo_category-anticensorship':'Dominios de herramientas anti-censura','geo_category-speedtest':'Dominios de prueba de velocidad',
+downloadFailed:'Descarga fallida',
+},
+zh:{
+restart:'重启',running:'运行中',stopped:'已停止',startProxy:'启动代理',stopProxy:'停止代理',
+servers:'服务器',settings:'设置',routing:'路由',
+autoConnect:'自动连接',test:'测试',testing:'测试中...',showLogs:'查看日志',
+name:'名称',protocol:'协议',domain:'域名',latency:'延迟',
+noServers:'暂无服务器。',addConfig:'添加配置',edit:'编辑',
+coreSettings:'核心设置',panel:'面板',
+currentVersion:'当前版本:',latestVersion:'最新版本:',notInstalled:'sing-box 未安装',
+os:'系统:',installGuide:'安装指南',versionPlaceholder:'版本 (如 1.13.11)',
+working:'处理中...',updateVersion:'更新版本',port:'端口',updatePort:'更新端口',
+portSaved:'端口已保存。请手动重启 DonJuan VPN 以生效。',
+seeConfig:'查看配置',
+geositeCategories:'Geosite 分类',customRules:'自定义规则',
+type:'类型',value:'值',valuePlaceholder:'值 (如 netflix.com)',action:'动作',source:'来源',sourcePlaceholder:'来源 (可选)',
+add:'添加',proxy:'代理',direct:'直连',block:'拦截',noCustomRules:'暂无自定义规则。',
+liveLogs:'实时日志',saveLogs:'保存日志',clearLogs:'清除日志',refresh:'刷新',
+time:'时间',source:'来源',dir:'方向',rule:'规则',all:'全部',noLogs:'暂无日志。',
+nameOptional:'名称 (可选)',cancel:'取消',save:'保存',delete:'删除',
+editConfig:'编辑配置',configuration:'配置',noConfig:'未找到配置文件。请启动代理以生成。',
+resetWarning:'这将重置 DonJuan。所有数据将被永久删除。',
+deleteEverything:'删除所有',areYouSure:'确定要删除吗？',
+willDelete:'将永久删除:',allConfigs:'所有服务器配置',geodataLogs:'地理数据、日志、缓存',
+cannotUndo:'此操作无法撤销。DonJuan VPN 将以干净状态重启。',
+proxyStarted:'代理已启动',proxyStopped:'代理已停止',failedStart:'代理启动失败',
+applyingChanges:'正在应用更改...',serverAdded:'服务器已添加: ',configUpdated:'配置已更新',
+latencyTestDone:'延迟测试完成',testingAll:'正在测试所有服务器...',
+connectedTo:'已连接到 ',noServer:'无可用服务器',
+cleaningUp:'正在清理...',cleanupDone:'清理完成。配置已重新加载。',
+installing:'正在安装/更新 sing-box...',installed:'sing-box 安装成功！',
+installFailed:'安装失败: ',installError:'安装错误: ',
+downloadingGeo:'正在下载 GeoIP 数据: ',downloadingGeosite:'正在下载 Geosite 数据: ',
+ruleAdded:'规则已添加',logFilesCleared:'日志文件已清除',failedClear:'清除日志失败',
+unsupportedProtocol:'不支持的协议。支持: vless, hy2, trojan',
+unsupportedTransport:'不支持的传输方式',
+unsupportedTransportMsg:' 不受支持。支持: none, tcp, grpc, httpupgrade',
+node:'节点 ',
+'cat_Geographic & TLD':'地理与顶级域名','cat_Ad-Blocking':'广告拦截','cat_Regional Content':'地区内容',
+'cat_Financial':'金融','cat_Media & Entertainment':'媒体与娱乐','cat_Gaming':'游戏',
+'cat_Tech & Dev':'技术与开发','cat_Communication & Social':'通讯与社交',
+'cat_E-Commerce':'电子商务','cat_Infrastructure':'基础设施',
+help_ipv6:'启用 IPv6 路由。仅在您的 ISP 原生支持 IPv6 时启用。',
+help_fakeIP:'使用 FakeIP 进行 DNS 解析。强烈推荐以获得更快的 DNS 响应和路由。',
+help_dnsLeaks:'通过阻止外部 DNS 查询来防止 DNS 泄漏。建议：开启。',
+help_routeOnly:'仅应用路由规则而不创建 TUN 接口。仅限高级用户。',
+help_allowInsecure:'允许不安全连接（跳过 TLS 验证）。自签名代理服务器通常需要。',
+help_tun:'创建 TUN 网络接口以捕获所有设备流量。全局代理必需。',
+help_sniffing:'检查流量以检测实际域名（SNI）。基于域名的路由所必需。',
+help_localNetwork:'绕过本地网络 IP 的代理（192.168.x.x, 10.x.x.x）。保持 LAN 可访问。',
+help_saveLogs:'将日志文件保存到磁盘（data/*.log）。关闭时，日志仅保存在内存中。',
+'geo_geolocation-cn':'托管在中国大陆的域名','geo_geolocation-!cn':'非中国大陆托管的域名',
+'geo_tld-cn':'.cn 及中文顶级域名','geo_tld-ru':'俄语顶级域名','geo_tld-opennic':'OpenNIC 顶级域名',
+'geo_category-ads':'常见广告域名','geo_category-ads-all':'综合广告域名列表',
+'geo_category-ads-ir':'伊朗广告域名','geo_category-ir':'伊朗域名','geo_category-ru':'俄语域名',
+'geo_category-finance':'金融和银行域名','geo_category-bank-cn':'中国银行域名',
+'geo_category-bank-ru':'俄罗斯银行域名','geo_category-cryptocurrency':'加密货币域名',
+'geo_category-media':'媒体和流媒体域名','geo_category-media-cn':'中国媒体域名',
+'geo_category-entertainment':'娱乐域名','geo_category-porn':'成人内容域名',
+'geo_category-acg':'动漫、漫画和游戏域名','geo_category-games':'游戏域名',
+'geo_category-games-cn':'中国游戏域名','geo_category-enhance-gaming':'游戏加速域名',
+'geo_category-dev':'开发和编程域名','geo_category-dev-cn':'中国开发者域名',
+'geo_category-doh':'DNS-over-HTTPS 域名','geo_category-proxy-tunnels':'代理和隧道域名',
+'geo_category-communication':'通讯和社交','geo_category-social-media-cn':'中国社交媒体',
+'geo_category-forums':'论坛和社区域名','geo_category-ecommerce':'电子商务域名',
+'geo_category-ecommerce-ru':'俄罗斯电商域名','geo_category-vpnservices':'VPN 服务域名',
+'geo_category-anticensorship':'反审查工具域名','geo_category-speedtest':'测速域名',
+downloadFailed:'下载失败',
+},
+ru:{
+restart:'Перезапуск',running:'Работает',stopped:'Остановлен',startProxy:'ЗАПУСТИТЬ ПРОКСИ',stopProxy:'ОСТАНОВИТЬ ПРОКСИ',
+servers:'Серверы',settings:'Настройки',routing:'Маршрутизация',
+autoConnect:'Автоподключение',test:'Тест',testing:'Тестирование...',showLogs:'Журнал',
+name:'Имя',protocol:'Протокол',domain:'Домен',latency:'Задержка',
+noServers:'Нет серверов.',addConfig:'Добавить конфигурацию',edit:'Изменить',
+coreSettings:'Основные настройки',panel:'Панель',
+currentVersion:'Текущая версия:',latestVersion:'Последняя версия:',notInstalled:'sing-box не установлен',
+os:'ОС:',installGuide:'Инструкция по установке',versionPlaceholder:'Версия (напр. 1.13.11)',
+working:'Обработка...',updateVersion:'Обновить версию',port:'Порт',updatePort:'Обновить порт',
+portSaved:'Порт сохранён. Перезапустите DonJuan VPN для применения.',
+seeConfig:'Просмотр конфигурации',
+geositeCategories:'Категории Geosite',customRules:'Пользовательские правила',
+type:'Тип',value:'Значение',valuePlaceholder:'Значение (напр. netflix.com)',action:'Действие',source:'Источник',sourcePlaceholder:'Источник (необязательно)',
+add:'Добавить',proxy:'Прокси',direct:'Напрямую',block:'Блокировать',noCustomRules:'Нет пользовательских правил.',
+liveLogs:'Живой журнал',saveLogs:'Сохранять логи',clearLogs:'Очистить логи',refresh:'Обновить',
+time:'Время',source:'Источник',dir:'Напр.',rule:'Правило',all:'Все',noLogs:'Логов пока нет.',
+nameOptional:'Имя (необязательно)',cancel:'Отмена',save:'Сохранить',delete:'Удалить',
+editConfig:'Изменить конфигурацию',configuration:'Конфигурация',noConfig:'Файл конфигурации не найден. Запустите прокси для генерации.',
+resetWarning:'Это сбросит DonJuan. Все данные будут навсегда удалены.',
+deleteEverything:'Удалить всё',areYouSure:'Вы абсолютно уверены?',
+willDelete:'Будет навсегда удалено:',allConfigs:'все конфигурации серверов',geodataLogs:'геоданные, логи, кэш',
+cannotUndo:'Это нельзя отменить. DonJuan VPN перезапустится с чистым состоянием.',
+proxyStarted:'Прокси запущен',proxyStopped:'Прокси остановлен',failedStart:'Не удалось запустить прокси',
+applyingChanges:'Применение изменений...',serverAdded:'Сервер добавлен: ',configUpdated:'Конфигурация обновлена',
+latencyTestDone:'Тест задержки завершён',testingAll:'Тестирование всех серверов...',
+connectedTo:'Подключено к ',noServer:'Нет доступных серверов',
+cleaningUp:'Очистка...',cleanupDone:'Очистка завершена. Конфигурация перезагружена.',
+installing:'Установка/обновление sing-box...',installed:'sing-box успешно установлен!',
+installFailed:'Ошибка установки: ',installError:'Ошибка установки: ',
+downloadingGeo:'Загрузка данных GeoIP для ',downloadingGeosite:'Загрузка данных Geosite для ',
+ruleAdded:'Правило добавлено',logFilesCleared:'Файлы логов очищены',failedClear:'Не удалось очистить логи',
+unsupportedProtocol:'Неподдерживаемый протокол. Поддерживаются: vless, hy2, trojan',
+unsupportedTransport:'Неподдерживаемый транспорт',
+unsupportedTransportMsg:' не поддерживается. Поддерживаются: none, tcp, grpc, httpupgrade',
+node:'Узел ',
+'cat_Geographic & TLD':'География и TLD','cat_Ad-Blocking':'Блокировка рекламы','cat_Regional Content':'Региональный контент',
+'cat_Financial':'Финансы','cat_Media & Entertainment':'Медиа и развлечения','cat_Gaming':'Игры',
+'cat_Tech & Dev':'Технологии и разработка','cat_Communication & Social':'Общение и соцсети',
+'cat_E-Commerce':'Электронная коммерция','cat_Infrastructure':'Инфраструктура',
+help_ipv6:'Включить IPv6 маршрутизацию. Включайте только если ваш ISP поддерживает IPv6.',
+help_fakeIP:'Использовать FakeIP для разрешения DNS. Настоятельно рекомендуется для ускорения DNS.',
+help_dnsLeaks:'Предотвратить утечки DNS, блокируя внешние запросы. Рекомендуется: ВКЛ.',
+help_routeOnly:'Только применять правила маршрутизации без создания TUN интерфейса. Для опытных пользователей.',
+help_allowInsecure:'Разрешить небезопасные соединения (пропускает проверку TLS). Часто нужно для самоподписанных серверов.',
+help_tun:'Создать TUN интерфейс для перехвата всего трафика. Обязательно для глобального прокси.',
+help_sniffing:'Проверять трафик для обнаружения доменных имён (SNI). Необходимо для маршрутизации по домену.',
+help_localNetwork:'Обойти прокси для локальных IP (192.168.x.x, 10.x.x.x). Сохраняет доступ к LAN.',
+help_saveLogs:'Сохранять логи на диск (data/*.log). Когда ВЫКЛ, логи хранятся только в памяти.',
+'geo_geolocation-cn':'Домены, размещённые в материковом Китае','geo_geolocation-!cn':'Домены НЕ из материкового Китая',
+'geo_tld-cn':'Домены под .cn и китайскими TLD','geo_tld-ru':'Домены под российскими TLD','geo_tld-opennic':'Домены под OpenNIC TLD',
+'geo_category-ads':'Популярные рекламные домены','geo_category-ads-all':'Полный список рекламных доменов',
+'geo_category-ads-ir':'Иранские рекламные домены','geo_category-ir':'Иранские домены','geo_category-ru':'Российские домены',
+'geo_category-finance':'Финансовые и банковские домены','geo_category-bank-cn':'Китайские банковские домены',
+'geo_category-bank-ru':'Российские банковские домены','geo_category-cryptocurrency':'Криптовалютные домены',
+'geo_category-media':'Медиа и стриминг домены','geo_category-media-cn':'Китайские медиа домены',
+'geo_category-entertainment':'Развлекательные домены','geo_category-porn':'Домены взрослого контента',
+'geo_category-acg':'Аниме, манга и игровые домены','geo_category-games':'Игровые домены',
+'geo_category-games-cn':'Китайские игровые домены','geo_category-enhance-gaming':'Домены игрового ускорения',
+'geo_category-dev':'Домены разработчиков и программирования','geo_category-dev-cn':'Китайские домены разработчиков',
+'geo_category-doh':'DNS-over-HTTPS домены','geo_category-proxy-tunnels':'Прокси и туннельные домены',
+'geo_category-communication':'Связь и мессенджеры','geo_category-social-media-cn':'Китайские социальные сети',
+'geo_category-forums':'Форумы и сообщества','geo_category-ecommerce':'Домены электронной коммерции',
+'geo_category-ecommerce-ru':'Российские домены электронной коммерции','geo_category-vpnservices':'Домены VPN сервисов',
+'geo_category-anticensorship':'Домены анти-цензуры','geo_category-speedtest':'Домены тестов скорости',
+downloadFailed:'Ошибка загрузки',
+}
+};
+
+document.addEventListener('alpine:init',()=>{
+Alpine.data('app',()=>({
+  tab:'servers',running:false,showLogs:false,showAddModal:false,showEditModal:false,showResetConfirm:false,showConfigModal:false,installing:false,busy:false,autoTesting:false,testing:false,
+  logs:[],newNodeUrl:'',newNodeRemarks:'',editNode:null,selectedNode:'auto',configJson:'',
+  logFilters:{dir:'',protocol:'',domain:''},
+  notif:'',notifType:'info',notifTimer:null,
+  sysinfo:{version:'',latestVersion:'',installed:false,os:''},
+  data:{
+    settings:{ipv6:false,fakeIP:true,dnsLeaks:false,routeOnly:false,allowInsecure:false,tun:true,sniffing:true,localNetwork:true,saveLogs:false,language:'en'},
+    port:8080,
+    routing:{customRules:[],geositeRules:{}},
+    nodes:[],selectedNode:'auto'
+  },
+  geositeCategories: [
+    { name: 'Geographic & TLD', items: ['geolocation-cn', 'geolocation-!cn', 'tld-cn', 'tld-!cn', 'tld-ru', 'tld-opennic'] },
+    { name: 'Ad-Blocking', items: ['category-ads', 'category-ads-all', 'category-ads-ir'] },
+    { name: 'Regional Content', items: ['category-ir', 'category-ru'] },
+    { name: 'Financial', items: ['category-finance', 'category-bank-cn', 'category-bank-ru', 'category-cryptocurrency'] },
+    { name: 'Media & Entertainment', items: ['category-media', 'category-media-cn', 'category-entertainment', 'category-porn', 'category-acg'] },
+    { name: 'Gaming', items: ['category-games', 'category-games-cn', 'category-enhance-gaming'] },
+    { name: 'Tech & Dev', items: ['category-dev', 'category-dev-cn', 'category-doh', 'category-proxy-tunnels'] },
+    { name: 'Communication & Social', items: ['category-communication', 'category-social-media-cn', 'category-forums'] },
+    { name: 'E-Commerce', items: ['category-ecommerce', 'category-ecommerce-ru'] },
+    { name: 'Infrastructure', items: ['category-vpnservices', 'category-anticensorship', 'category-speedtest'] }
+  ],
+  openCategory: null,
+  newRule:{type:'Domain',value:'',action:'Proxy',source:''},
+  connInterval:null,
+
+  t(key){const lang=this.data.settings.language||'en';return(i18n[lang]&&i18n[lang][key])||(i18n.en[key])||key;},
+
+  getSettingLabel(key){
+    const m={tun:'TUN',fakeIP:'Fake IP',dnsLeaks:'DNS Leaks',routeOnly:'Route Only',allowInsecure:'Allow Insecure',localNetwork:'Local Network',saveLogs:'Save Logs',ipv6:'IPv6',sniffing:'Sniffing'};
+    return m[key]||this.t(key)||key.replace(/([A-Z])/g,' $1').trim();
+  },
+
+  showNotif(msg,type){
+    this.notif=msg;this.notifType=type||'info';
+    clearTimeout(this.notifTimer);
+    this.notifTimer=setTimeout(()=>{this.notif=''},4000);
+  },
+
+  async init(){
+    this.loadConfig();
+    await this.loadData();
+    await this.loadSysinfo();
+    await this.checkLatestVersion();
+    await this.checkStatus();
+    this.$watch('showLogs',v=>{
+      if(v){this.fetchLogs();this.connInterval=setInterval(()=>this.fetchLogs(),2000)}
+      else{clearInterval(this.connInterval)}
+    });
+    setInterval(()=>this.checkStatus(),3000);
+    setInterval(()=>this.checkLatestVersion(),86400000);
+  },
+
+  async checkStatus(){if(this.busy)return;try{const r=await fetch('/api/status');if(r.ok){this.running=(await r.json()).running;if(this.running&&!this.sysinfo.latestVersion)this.checkLatestVersion();}}catch(e){}},
+
+  async loadSysinfo(){try{const r=await fetch('/api/sysinfo');if(r.ok){const d=await r.json();this.sysinfo.version=d.version;this.sysinfo.installed=d.installed;this.sysinfo.os=d.os;this.sysinfo.targetVersion='';}}catch(e){}},
+
+  async checkLatestVersion(){
+    try{
+      const r=await fetch('https://api.github.com/repos/SagerNet/sing-box/releases/latest');
+      if(r.ok){const d=await r.json();const tag=d.tag_name||'';this.sysinfo.latestVersion=tag.replace(/^v/,'');}
+    }catch(e){}
+  },
+
+  async loadConfig(){
+    try{
+      const r=await fetch('/api/config');
+      if(r.ok){this.configJson=await r.text();}
+      else{this.configJson=window.__CONFIG_JSON__||'';}
+    }catch(e){this.configJson=window.__CONFIG_JSON__||'';}
+  },
+
+  async installSingbox(){
+    this.installing=true;this.showNotif(this.t('installing'));
+    try{
+      let url='/api/install-singbox';
+      if(this.sysinfo.targetVersion){url+='?version='+encodeURIComponent(this.sysinfo.targetVersion)}
+      const r=await fetch(url);
+      if(r.ok){this.showNotif(this.t('installed'));await this.loadSysinfo()}
+      else{this.showNotif(this.t('installFailed')+(await r.text()),'error')}
+    }catch(e){this.showNotif(this.t('installError')+e,'error')}
+    this.installing=false;
+  },
+
+  async loadData(){
+    const res=await fetch('/api/data');
+    if(res.ok){
+      const p=await res.json();
+      if(p&&p.settings){
+        this.data=p;
+        if(!this.data.nodes)this.data.nodes=[];
+        if(!this.data.routing.customRules)this.data.routing.customRules=[];
+        if(!this.data.routing.geositeRules)this.data.routing.geositeRules={};
+        if(!this.data.port)this.data.port=8080;
+        if(!this.data.settings.language)this.data.settings.language='en';
+
+        this.geositeCategories.forEach(cat => cat.items.forEach(item => {
+          if(!this.data.routing.geositeRules[item]) this.data.routing.geositeRules[item]='proxy';
+        }));
+
+        if(this.data.selectedNode)this.selectedNode=this.data.selectedNode;
+      }
+      else{await this.saveData()}
+    }
+  },
+
+  async saveData(){
+    this.busy=true;
+    this.data.selectedNode=this.selectedNode;
+    const wasRunning=this.running;
+    try {
+      await fetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(this.data)});
+    } catch(e) {}
+    if(wasRunning){
+      this.showNotif(this.t('applyingChanges'), 'info');
+      await fetch('/api/start?node='+this.selectedNode);
+      this.running=true;
+    }
+    this.loadConfig();
+    setTimeout(()=>{this.busy=false},3000);
+  },
+
+  async startProxy(){
+    this.busy=true;
+    this.running=true;
+    const res=await fetch('/api/start?node='+this.selectedNode);
+    if(res.ok){this.running=true;this.showNotif(this.t('proxyStarted'));this.loadConfig()}
+    else{this.running=false;this.showNotif(this.t('failedStart'),'error')}
+    setTimeout(()=>{this.busy=false},3000);
+  },
+
+  async stopProxy(){
+    this.busy=true;
+    this.showNotif(this.t('cleaningUp'));
+    const res=await fetch('/api/stop');
+    if(res.ok){this.running=false;this.showNotif(this.t('proxyStopped'))}
+    setTimeout(()=>{this.busy=false},1000);
+  },
+
+  async autoSelect(){
+    this.autoTesting=true;this.showNotif(this.t('testingAll'));
+    let best=null,bestMs=Infinity;
+    for(const n of this.data.nodes){
+      try{const r=await fetch('/api/test-latency?id='+encodeURIComponent(n.id)+'&url='+encodeURIComponent(n.url));if(r.ok){const d=await r.json();n.latency=d.ms>0?d.ms:-1;if(d.ms>0&&d.ms<bestMs){bestMs=d.ms;best=n}}}
+      catch(e){n.latency=-1}
+    }
+    this.autoTesting=false;
+    try{await fetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(this.data)})}catch(e){}
+    if(best){this.selectedNode=best.id;this.busy=true;this.running=true;await this.startProxy();setTimeout(()=>{this.busy=false},5000);this.showNotif(this.t('connectedTo')+best.remarks+' ('+bestMs+'ms)')}
+    else{this.showNotif(this.t('noServer'),'error');await fetch('/api/cleanup');this.running=false}
+  },
+
+  forceCleanup(){
+    this.showNotif(this.t('cleaningUp'));
+    fetch('/api/cleanup').then(async ()=>{
+      this.running=false;
+      await this.loadData();
+      this.showNotif(this.t('cleanupDone'));
+    });
+  },
+
+  async toggleGeo(key){
+    const code=key.replace('direct','').toLowerCase();
+    if(this.data.routing[key]){
+      this.showNotif(this.t('downloadingGeo')+code.toUpperCase()+'...');
+      try{
+        const r=await fetch('/api/download-geodata?name=geoip-'+code);
+        if(r.ok){
+          const results=await r.json();
+          let ok=true;
+          for(const res of results){
+            if(res.error){this.showNotif('Error: '+res.file+': '+res.error,'error');ok=false}
+            else{this.showNotif(res.file+' downloaded ('+(res.size/1024).toFixed(0)+' KB)')}
+          }
+          if(!ok){this.data.routing[key]=false;return}
+        }else{this.showNotif(this.t('downloadFailed'),'error');this.data.routing[key]=false;return}
+      }catch(e){this.showNotif(this.t('installError')+e,'error');this.data.routing[key]=false;return}
+    }
+    this.saveData();
+  },
+
+  async toggleGeositeRule(item, action){
+    if(action !== 'proxy'){
+      this.busy=true;
+      this.showNotif(this.t('downloadingGeosite')+item+'...');
+      try{
+        const r=await fetch('/api/download-geodata?name=geosite-'+item);
+        if(r.ok){
+          const results=await r.json();
+          let ok=true;
+          for(const res of results){
+            if(res.error){this.showNotif('Error: '+res.file+': '+res.error,'error');ok=false}
+            else{this.showNotif(res.file+' downloaded ('+(res.size/1024).toFixed(0)+' KB)')}
+          }
+          if(!ok){this.data.routing.geositeRules[item]='proxy';return}
+        }else{this.showNotif(this.t('downloadFailed'),'error');this.data.routing.geositeRules[item]='proxy';return}
+      }catch(e){this.showNotif(this.t('installError')+e,'error');this.data.routing.geositeRules[item]='proxy';return}
+    }
+    this.saveData();
+  },
+
+  async addNode(){
+    if(!this.newNodeUrl)return;
+    const proto=this.detectProtocol(this.newNodeUrl);
+    if(!proto){this.showNotif(this.t('unsupportedProtocol'),'error');return;}
+    const transportErr=this.validateTransport(this.newNodeUrl,proto);
+    if(transportErr){this.showNotif(transportErr,'error');return;}
+    let domain='',remarks=(this.newNodeRemarks||'').trim();
+    try{const u=new URL(this.newNodeUrl);domain=u.hostname;if(!remarks&&u.hash){let p=u.hash.split('#').filter(Boolean);if(p.length>0)remarks=decodeURIComponent(p[p.length-1])}}catch(e){}
+    if(!remarks)remarks=this.t('node')+(this.data.nodes.length+1);
+    this.data.nodes.push({id:Math.random().toString(36).substring(7),remarks,type:proto,url:this.newNodeUrl,domain,latency:0});
+    this.newNodeUrl='';this.newNodeRemarks='';this.showAddModal=false;
+    await this.saveData();this.showNotif(this.t('serverAdded')+remarks);
+  },
+
+  detectProtocol(url){
+    if(url.startsWith('vless://'))return'vless';
+    if(url.startsWith('hy2://')||url.startsWith('hysteria2://'))return'hy2';
+    if(url.startsWith('trojan://'))return'trojan';
+    return null;
+  },
+
+  validateTransport(url,proto){
+    if(proto==='hy2')return null;
+    try{
+      const u=new URL(url);
+      const t=(u.searchParams.get('type')||'').toLowerCase();
+      if(!t||t==='tcp')return null;
+      if(t==='grpc'||t==='httpupgrade')return null;
+      return this.t('unsupportedTransport')+': '+t+this.t('unsupportedTransportMsg');
+    }catch(e){return null;}
+  },
+
+  async saveEditNode(){
+    if(!this.editNode)return;
+    const node=this.data.nodes.find(n=>n.id===this.editNode.id);
+    if(!node)return;
+    const proto=this.detectProtocol(this.editNode.url);
+    if(!proto){this.showNotif(this.t('unsupportedProtocol'),'error');return;}
+    const transportErr=this.validateTransport(this.editNode.url,proto);
+    if(transportErr){this.showNotif(transportErr,'error');return;}
+    node.remarks=this.editNode.remarks;
+    node.url=this.editNode.url;
+    node.type=proto;
+    let domain='';
+    try{const u=new URL(this.editNode.url);domain=u.hostname;}catch(e){}
+    node.domain=domain;
+    this.showEditModal=false;this.editNode=null;
+    await this.saveData();this.showNotif(this.t('configUpdated'));
+  },
+
+  async deleteNode(id){this.data.nodes=this.data.nodes.filter(n=>n.id!==id);if(this.selectedNode===id)this.selectedNode='auto';await this.saveData()},
+
+  async addRule(){
+    if(!this.newRule.value)return;
+    if(!this.data.routing.customRules)this.data.routing.customRules=[];
+    this.data.routing.customRules.push({...this.newRule,id:Math.random().toString(36).substring(7)});
+    this.newRule={type:'Domain',value:'',action:'Proxy',source:''};
+    await this.saveData();this.showNotif(this.t('ruleAdded'));
+  },
+
+  async deleteRule(i){this.data.routing.customRules.splice(i,1);await this.saveData()},
+
+  async testLatency(){
+    this.testing=true;this.showNotif(this.t('testingAll').replace('...',''));
+    for(const n of this.data.nodes){
+      try{const r=await fetch('/api/test-latency?id='+encodeURIComponent(n.id)+'&url='+encodeURIComponent(n.url));if(r.ok){const d=await r.json();n.latency=d.ms>0?d.ms:-1}}catch(e){n.latency=-1}
+    }
+    this.testing=false;this.showNotif(this.t('latencyTestDone'));
+    try{await fetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(this.data)})}catch(e){}
+  },
+
+  confirmReset(){this.showResetConfirm=true;},
+
+  async resetEverything(){
+    this.showResetConfirm=false;
+    this.showNotif(this.t('resetWarning'));
+    try{
+      await fetch('/api/reset');
+    }catch(e){}
+  },
+
+  getSettingHelp(key){
+    const h={
+      ipv6:this.t('help_ipv6'),
+      fakeIP:this.t('help_fakeIP'),
+      dnsLeaks:this.t('help_dnsLeaks'),
+      routeOnly:this.t('help_routeOnly'),
+      allowInsecure:this.t('help_allowInsecure'),
+      tun:this.t('help_tun'),
+      sniffing:this.t('help_sniffing'),
+      localNetwork:this.t('help_localNetwork'),
+      saveLogs:this.t('help_saveLogs')
+    };
+    return h[key]||'';
+  },
+
+  getGeositeHelp(item){
+    const h={
+      'geolocation-cn':this.t('geo_geolocation-cn'),
+      'geolocation-!cn':this.t('geo_geolocation-!cn'),
+      'tld-cn':this.t('geo_tld-cn'),
+      'tld-!cn':this.t('geo_tld-!cn'),
+      'tld-ru':this.t('geo_tld-ru'),
+      'tld-opennic':this.t('geo_tld-opennic'),
+      'category-ads':this.t('geo_category-ads'),
+      'category-ads-all':this.t('geo_category-ads-all'),
+      'category-ads-ir':this.t('geo_category-ads-ir'),
+      'category-ir':this.t('geo_category-ir'),
+      'category-ru':this.t('geo_category-ru'),
+      'category-finance':this.t('geo_category-finance'),
+      'category-bank-cn':this.t('geo_category-bank-cn'),
+      'category-bank-ru':this.t('geo_category-bank-ru'),
+      'category-cryptocurrency':this.t('geo_category-cryptocurrency'),
+      'category-media':this.t('geo_category-media'),
+      'category-media-cn':this.t('geo_category-media-cn'),
+      'category-entertainment':this.t('geo_category-entertainment'),
+      'category-porn':this.t('geo_category-porn'),
+      'category-acg':this.t('geo_category-acg'),
+      'category-games':this.t('geo_category-games'),
+      'category-games-cn':this.t('geo_category-games-cn'),
+      'category-enhance-gaming':this.t('geo_category-enhance-gaming'),
+      'category-dev':this.t('geo_category-dev'),
+      'category-dev-cn':this.t('geo_category-dev-cn'),
+      'category-doh':this.t('geo_category-doh'),
+      'category-proxy-tunnels':this.t('geo_category-proxy-tunnels'),
+      'category-communication':this.t('geo_category-communication'),
+      'category-social-media-cn':this.t('geo_category-social-media-cn'),
+      'category-forums':this.t('geo_category-forums'),
+      'category-ecommerce':this.t('geo_category-ecommerce'),
+      'category-ecommerce-ru':this.t('geo_category-ecommerce-ru'),
+      'category-vpnservices':this.t('geo_category-vpnservices'),
+      'category-anticensorship':this.t('geo_category-anticensorship'),
+      'category-speedtest':this.t('geo_category-speedtest')
+    };
+    return h[item]||'';
+  },
+
+  get parsedLogs(){
+    return this.logs.map(line=>{
+      let time='',dir='',domain='',source='',protocol='',raw=line;
+      const tm=line.match(/\[(\d{2}:\d{2}:\d{2})\]/);
+      if(tm)time=tm[1];
+
+      const pMatch = line.match(/(inbound|outbound)\/([^\[:]+)/);
+      if(pMatch) {
+          dir=pMatch[1];
+          protocol=pMatch[2];
+      }
+
+      const sm=line.match(/from ([\d\.]+:\d+)/);
+      if(sm) source=sm[1];
+
+      const dm=line.match(/to ([\w\.-]+:\d+)/);
+      if(dm) domain=dm[1];
+
+      if(!time) { time='-'; protocol='system'; domain=line.substring(0, 100); }
+
+      return{time,dir,domain,source,protocol,raw};
+    });
+  },
+
+  get filteredLogs() {
+     return this.parsedLogs.filter(l => {
+        if(this.logFilters.dir && l.dir !== this.logFilters.dir) return false;
+        if(this.logFilters.protocol && l.protocol !== this.logFilters.protocol) return false;
+        if(this.logFilters.domain && !l.domain.includes(this.logFilters.domain)) return false;
+        return true;
+     });
+  },
+
+  async fetchLogs(){
+    try{const r=await fetch('/api/logs');if(r.ok){this.logs=await r.json()||[];this.$nextTick(()=>{const c=document.getElementById('logContainer');if(c)c.scrollTop=c.scrollHeight})}}catch(e){}
+  },
+
+  async clearLogFiles(){
+    try{await fetch('/api/clear-logs',{method:'POST'});this.logs=[];this.showNotif(this.t('logFilesCleared'))}catch(e){this.showNotif(this.t('failedClear'),'error')}
+  }
+}));
+});
+</script>
+</body>
+</html>
