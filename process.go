@@ -15,7 +15,6 @@ import (
 
 var (
 	singboxCmd     *exec.Cmd
-	singboxRunning bool
 	logBuffer      []string
 	logMu          sync.Mutex
 	processMu      sync.Mutex
@@ -44,8 +43,8 @@ func writeToLogFile(entry string) {
 		if currentLogFile != nil {
 			currentLogFile.Close()
 		}
-		os.MkdirAll("data", 0755)
-		f, err := os.OpenFile(fmt.Sprintf("data/%s.log", today), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+os.MkdirAll("donjuan-data", 0755)
+	f, err := os.OpenFile(fmt.Sprintf("donjuan-data/%s.log", today), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 		if err != nil {
 			return
 		}
@@ -120,10 +119,9 @@ func startSingbox() error {
 	removeTUN()
 	time.Sleep(200 * time.Millisecond)
 	singboxCmd = nil
-	singboxRunning = false
 
 	cmdPath := findSingbox()
-	cmd := exec.Command(cmdPath, "run", "-c", "config.json")
+	cmd := exec.Command(cmdPath, "run", "-c", "donjuan-data/config.json")
 
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
@@ -136,7 +134,6 @@ func startSingbox() error {
 	}
 
 	singboxCmd = cmd
-	singboxRunning = true
 	addLog(fmt.Sprintf("sing-box started (PID %d)", cmd.Process.Pid))
 
 	go func() {
@@ -149,7 +146,6 @@ func startSingbox() error {
 	go func() {
 		cmd.Wait()
 		processMu.Lock()
-		singboxRunning = false
 		singboxCmd = nil
 		processMu.Unlock()
 	}()
@@ -177,7 +173,6 @@ func stopSingboxLocked() {
 	removeTUN()
 
 	singboxCmd = nil
-	singboxRunning = false
 	addLog("sing-box stopped and TUN cleaned")
 }
 

@@ -8,6 +8,7 @@ type AppData struct {
 		RouteOnly     bool   `json:"routeOnly"`
 		AllowInsecure bool   `json:"allowInsecure"`
 		TUN           bool   `json:"tun"`
+		AutoRedirect  bool   `json:"autoRedirect"`
 		Sniffing      bool   `json:"sniffing"`
 		LocalNetwork  bool   `json:"localNetwork"`
 		SaveLogs      bool   `json:"saveLogs"`
@@ -15,18 +16,21 @@ type AppData struct {
 	} `json:"settings"`
 	Port    int `json:"port"`
 	Routing struct {
-		DirectCN     bool                      `json:"directCN"`
-		DirectRU     bool                      `json:"directRU"`
-		DirectIR     bool                      `json:"directIR"`
-		DirectCU     bool                      `json:"directCU"`
-		DirectVN     bool                      `json:"directVN"`
-		DirectBR     bool                      `json:"directBR"`
-		DirectUS     bool                      `json:"directUS"`
 		CustomRules  []CustomRule              `json:"customRules"`
 		GeositeRules map[string]string         `json:"geositeRules"` // category -> "proxy"|"direct"|"block"
 	} `json:"routing"`
-	Nodes        []Node `json:"nodes"`
-	SelectedNode string `json:"selectedNode"`
+	Nodes         []Node         `json:"nodes"`
+	Subscriptions []Subscription `json:"subscriptions"`
+	SelectedNode  string         `json:"selectedNode"`
+	ProxyRunning  bool           `json:"proxyRunning"`
+}
+
+type Subscription struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	URL     string `json:"url"`
+	Details string `json:"details"`
+	Nodes   []Node `json:"nodes"`
 }
 
 type CustomRule struct {

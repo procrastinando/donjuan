@@ -61,7 +61,7 @@ func generateSingboxConfig(data AppData, selectedNodeID string) ([]byte, error) 
 
 	// Collect domain names from proxy servers for DNS rules
 	var proxyServerDomains []string
-	for _, node := range data.Nodes {
+	for _, node := range allNodes(data) {
 		u, err := url.Parse(node.URL)
 		if err == nil && u.Hostname() != "" && net.ParseIP(u.Hostname()) == nil {
 			proxyServerDomains = append(proxyServerDomains, u.Hostname())
@@ -93,6 +93,9 @@ func generateSingboxConfig(data AppData, selectedNodeID string) ([]byte, error) 
 				"auto_route":   true,
 				"strict_route": true,
 			}
+			if data.Settings.AutoRedirect {
+				tunInbound["auto_redirect"] = true
+			}
 			if data.Settings.IPv6 {
 				tunInbound["address"] = []string{"172.19.0.1/30", "fdfe:dcba:9876::1/126"}
 			}
@@ -105,7 +108,7 @@ func generateSingboxConfig(data AppData, selectedNodeID string) ([]byte, error) 
 	var outbounds []interface{}
 	var proxyTags []string
 
-	for _, node := range data.Nodes {
+	for _, node := range allNodes(data) {
 		outbound, err := parseNodeURL(node.URL, data.Settings.AllowInsecure)
 		if err != nil {
 			addLog(fmt.Sprintf("WARN: Skipping node %s (%s): %v", node.ID, node.Type, err))
@@ -188,7 +191,7 @@ func generateSingboxConfig(data AppData, selectedNodeID string) ([]byte, error) 
 
 // Add proxy server IPs/hostnames to direct routing (prevents TUN routing loop)
 	seenHosts := make(map[string]bool)
-	for _, node := range data.Nodes {
+	for _, node := range allNodes(data) {
 		u, err := url.Parse(node.URL)
 		if err != nil || u.Hostname() == "" {
 			continue
@@ -231,45 +234,12 @@ func generateSingboxConfig(data AppData, selectedNodeID string) ([]byte, error) 
 	}
 
 	// Geosite/GeoIP direct routing rules
-	// GeoIP is available for all countries; GeoSite only exists for CN
 	var ruleSets []interface{}
-	addGeoRule := func(code string) {
-		geoipFile := fmt.Sprintf("data/geoip-%s.srs", code)
-		if fileExists(geoipFile) {
-			geoipTag := "geoip-" + code
-			rules = append(rules, map[string]interface{}{
-				"rule_set": geoipTag,
-				"outbound": "direct",
-			})
-			ruleSets = append(ruleSets, map[string]interface{}{
-				"type":   "local",
-				"tag":    geoipTag,
-				"format": "binary",
-				"path":   geoipFile,
-			})
-		}
-		if code == "cn" {
-			geositeFile := "data/geosite-cn.srs"
-			if fileExists(geositeFile) {
-				geositeTag := "geosite-cn"
-				rules = append(rules, map[string]interface{}{
-					"rule_set": geositeTag,
-					"outbound": "direct",
-				})
-				ruleSets = append(ruleSets, map[string]interface{}{
-					"type":   "local",
-					"tag":    geositeTag,
-					"format": "binary",
-					"path":   geositeFile,
-				})
-			}
-		}
-	}
 
 	for key, action := range data.Routing.GeositeRules {
 		action = strings.ToLower(action)
 		if action == "direct" || action == "block" {
-			geositeFile := fmt.Sprintf("data/geosite-%s.srs", key)
+			geositeFile := fmt.Sprintf("donjuan-data/geosite-%s.srs", key)
 			if fileExists(geositeFile) {
 				tag := "geosite-" + key
 				rules = append(rules, map[string]interface{}{
@@ -284,28 +254,6 @@ func generateSingboxConfig(data AppData, selectedNodeID string) ([]byte, error) 
 				})
 			}
 		}
-	}
-
-	if data.Routing.DirectCN {
-		addGeoRule("cn")
-	}
-	if data.Routing.DirectRU {
-		addGeoRule("ru")
-	}
-	if data.Routing.DirectIR {
-		addGeoRule("ir")
-	}
-	if data.Routing.DirectCU {
-		addGeoRule("cu")
-	}
-	if data.Routing.DirectVN {
-		addGeoRule("vn")
-	}
-	if data.Routing.DirectBR {
-		addGeoRule("br")
-	}
-	if data.Routing.DirectUS {
-		addGeoRule("us")
 	}
 
 	if len(ruleSets) > 0 {
