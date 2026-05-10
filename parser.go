@@ -179,12 +179,13 @@ func generateSingboxConfig(data AppData, selectedNodeID string) ([]byte, error) 
 				"outbounds": proxyTagsWithDirect,
 			},
 			map[string]interface{}{
-				"type":      "urltest",
-				"tag":       "auto",
-				"outbounds": proxyTagsWithDirect,
-				"url":       "http://cp.cloudflare.com/generate_204",
-				"interval":  "3m",
-				"tolerance": 50,
+				"type":                        "urltest",
+				"tag":                         "auto",
+				"outbounds":                   proxyTagsWithDirect,
+				"url":                         "https://www.gstatic.com/generate_204",
+				"interval":                    "1m",
+				"tolerance":                   50,
+				"interrupt_exist_connections": true,
 			},
 		}, outbounds...)
 	} else {
