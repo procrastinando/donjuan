@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>DonJuan VPN</title>
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
 <script src="https://cdn.tailwindcss.com"></script>
 <script>tailwind.config={darkMode:'class',theme:{extend:{colors:{darkBg:'#0f172a',darkCard:'#1e293b'}}}}</script>
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -16,11 +17,24 @@
 <!-- Notification -->
 <div x-show="notif" x-cloak class="notif" :class="notifType==='error'?'bg-red-600':'bg-blue-600'" x-text="notif" x-transition></div>
 
+<!-- OpenWrt Default Password Banner -->
+<div x-show="showOpenwrtBanner" x-cloak class="fixed bottom-4 right-4 z-50 max-w-sm bg-amber-900/90 border border-amber-600 rounded-xl p-4 shadow-2xl backdrop-blur-sm" x-transition>
+  <div class="flex items-start space-x-3">
+    <svg class="w-6 h-6 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+    <div class="flex-1">
+      <p class="text-amber-200 font-medium" x-text="t('openwrtModeEnabled')"></p>
+      <p class="text-amber-300 text-sm mt-1"><span x-text="t('defaultPassword')"></span> <code class="bg-amber-800 px-1.5 py-0.5 rounded font-mono text-amber-200">donjuan</code></p>
+    </div>
+    <button @click="showOpenwrtBanner=false" class="text-amber-400 hover:text-amber-200 flex-shrink-0"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+  </div>
+</div>
+
 <div class="max-w-4xl mx-auto space-y-6">
 <div class="flex items-center justify-between mb-2">
   <a href="https://donjuanvpn.com" target="_blank" class="text-3xl font-bold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent hover:from-blue-300 hover:to-indigo-400 transition-colors">DonJuan VPN</a>
   <div class="flex items-center space-x-4">
     <button @click="forceCleanup()" class="text-xs bg-slate-600 hover:bg-slate-500 text-white px-2 py-1 rounded shadow" x-text="t('restart')"></button>
+    <button x-show="data.settings.openwrtMode" @click="openwrtLogout()" class="text-xs bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded shadow" x-text="t('logout')+' ⏻'"></button>
     <div class="flex items-center space-x-2">
       <div class="w-3 h-3 rounded-full" :class="running?'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]':'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]'"></div>
       <span class="text-sm font-medium" x-text="running?t('running'):t('stopped')"></span>
@@ -36,13 +50,15 @@
   <button @click="tab='servers'" :class="tab==='servers'?'bg-blue-600 text-white':'text-slate-400'" class="flex-1 py-2 text-sm font-medium rounded-md transition-colors" x-text="t('servers')"></button>
   <button @click="tab='settings'" :class="tab==='settings'?'bg-blue-600 text-white':'text-slate-400'" class="flex-1 py-2 text-sm font-medium rounded-md transition-colors" x-text="t('settings')"></button>
   <button @click="tab='routing'" :class="tab==='routing'?'bg-blue-600 text-white':'text-slate-400'" class="flex-1 py-2 text-sm font-medium rounded-md transition-colors" x-text="t('routing')"></button>
+  <button x-show="data.settings.openwrtMode" @click="tab='router'" :class="tab==='router'?'bg-blue-600 text-white':'text-slate-400'" class="flex-1 py-2 text-sm font-medium rounded-md transition-colors" x-text="t('router')"></button>
 </div>
 
 <!-- Servers -->
 <div x-show="tab==='servers'" x-cloak class="space-y-4">
   <div class="flex items-center space-x-2">
-    <button @click="autoSelect()" :disabled="autoTesting" class="px-3 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 rounded-md text-white font-medium border border-slate-600" :class="autoTesting?'opacity-50 cursor-wait':''"><span x-show="autoTesting" class="inline-block animate-spin mr-1">⟳</span><span x-text="autoTesting?t('testing'):t('autoConnect')"></span></button>
-    <button @click="testLatency()" :disabled="testing" class="px-3 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 rounded-md text-white font-medium border border-slate-600" :class="testing?'opacity-50 cursor-wait':''"><span x-show="testing" class="inline-block animate-spin mr-1">⟳</span><span x-text="testing?t('testing'):t('test')"></span></button>
+    <button @click="autoSelect()" :disabled="autoTesting" class="px-3 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 rounded-md text-white font-medium border border-slate-600" :class="autoTesting?'opacity-50 cursor-wait':''"><span x-show="autoTesting" class="inline-block animate-spin mr-1">⟳</span><span x-text="autoTesting?t('testing'):t('testAllStart')"></span></button>
+    <button @click="testLatency()" :disabled="testing" class="px-3 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 rounded-md text-white font-medium border border-slate-600" :class="testing?'opacity-50 cursor-wait':''"><span x-show="testing" class="inline-block animate-spin mr-1">⟳</span><span x-text="testing?t('testing'):t('testAll')"></span></button>
+    <button @click="testCurrentLatency()" :disabled="testingCurrent" class="px-3 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 rounded-md text-white font-medium border border-slate-600" :class="testingCurrent?'opacity-50 cursor-wait':''"><span x-show="testingCurrent" class="inline-block animate-spin mr-1">⟳</span><span x-text="t('testCurrent')"></span></button>
     <div class="flex-1"></div>
     <button @click="showLogs=true" class="px-3 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 rounded-md text-white font-medium border border-slate-600" x-text="t('showLogs')"></button>
   </div>
@@ -138,17 +154,17 @@
 <!-- Settings -->
 <div x-show="tab==='settings'" x-cloak class="space-y-6">
   <div class="bg-darkCard rounded-xl p-6 shadow-lg border border-slate-700/50">
-    <h2 class="text-xl font-semibold mb-6" x-text="t('coreSettings')"></h2>
+    <h2 class="text-xl font-semibold mb-6" x-text="t('singboxSettings')"></h2>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <template x-for="(value,key) in data.settings" :key="key">
-        <template x-if="key!=='language'">
+        <template x-if="key!=='language' && key!=='clientSubnet'">
         <label class="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700/50 hover:bg-slate-800 cursor-pointer">
           <div class="flex items-center space-x-2" :title="getSettingHelp(key)">
             <span class="font-medium capitalize text-slate-200" x-text="getSettingLabel(key)"></span>
             <svg class="w-4 h-4 text-slate-500 hover:text-slate-300 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           </div>
           <div class="relative inline-block w-12 mr-2 align-middle select-none">
-            <input type="checkbox" x-model="data.settings[key]" @change="saveData()" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200" :class="data.settings[key]?'translate-x-6 border-blue-500':'translate-x-0 border-slate-400'"/>
+            <input type="checkbox" x-model="data.settings[key]" @change="onSettingChange(key)" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200" :class="data.settings[key]?'translate-x-6 border-blue-500':'translate-x-0 border-slate-400'"/>
             <label class="toggle-label block overflow-hidden h-6 rounded-full cursor-pointer" :class="data.settings[key]?'bg-blue-500':'bg-slate-400'"></label>
           </div>
         </label>
@@ -157,24 +173,12 @@
     </div>
   </div>
   <div class="bg-darkCard rounded-xl p-6 shadow-lg border border-slate-700/50">
-    <h2 class="text-xl font-semibold mb-4" x-text="t('panel')"></h2>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div>
-        <p class="text-sm text-slate-400">
-          <span x-show="sysinfo.installed"><span x-text="t('currentVersion')"></span> <span class="text-white font-mono" x-text="sysinfo.version"></span></span>
-          <span x-show="!sysinfo.installed"><a href="https://github.com/procrastinando/donjuan" target="_blank" class="text-blue-400 hover:text-blue-300 underline"><span x-text="t('currentVersion')"></span></a> <span class="text-red-400 font-mono" x-text="t('notInstalled')"></span></span>
-        </p>
-        <p class="text-sm text-slate-400" x-show="sysinfo.latestVersion"><span x-text="t('latestVersion')"></span> <span x-show="sysinfo.latestVersion!==sysinfo.version" class="font-mono"><a href="https://github.com/procrastinando/donjuan" target="_blank" class="text-blue-400 hover:text-blue-300 underline" x-text="sysinfo.latestVersion"></a></span><span x-show="sysinfo.latestVersion===sysinfo.version" class="text-white font-mono" x-text="sysinfo.latestVersion"></span></p>
-        <p class="text-sm text-slate-500 mt-1"><span x-text="t('os')"></span> <span class="text-white" x-text="sysinfo.os"></span></p>
-        <button x-show="!sysinfo.installed" @click="installSingbox()" :disabled="installing" class="mt-3 px-3 py-1.5 text-sm rounded text-white" :class="installing?'bg-gray-500 cursor-wait':'bg-green-600 hover:bg-green-500'">
-          <span x-show="installing" class="inline-block animate-spin mr-1">⟳</span>
-          <span x-text="installing?t('working'):t('installGuide')"></span>
-        </button>
-      </div>
-      <div class="space-y-3">
+    <h2 class="text-xl font-semibold mb-4" x-text="t('advanced')"></h2>
+    <div class="flex flex-col space-y-4">
+      <div class="flex flex-wrap items-center gap-4">
         <div class="flex items-center space-x-2">
           <input type="number" x-model.number="data.port" :placeholder="t('port')" class="w-32 bg-slate-800 text-white text-sm rounded border border-slate-600 px-2 py-1.5">
-          <button @click="saveData(); showNotif(t('portSaved'))" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded" x-text="t('updatePort')"></button>
+          <button @click="updatePort()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded disabled:opacity-50" :disabled="updatingPort" x-text="updatingPort ? t('working') : t('updatePort')"></button>
         </div>
         <div>
           <select x-model="data.settings.language" @change="saveData()" class="bg-slate-800 border border-slate-600 rounded text-sm text-white px-2 py-1.5 focus:outline-none focus:border-blue-500">
@@ -185,41 +189,17 @@
           </select>
         </div>
       </div>
+      <div class="flex flex-wrap gap-2 pt-4 border-t border-slate-700/50">
+        <button @click="showConfigModal=true;loadConfig()" class="text-sm bg-slate-700/50 text-slate-300 hover:bg-slate-600/50 hover:text-white px-4 py-2 rounded-lg font-medium" x-text="t('seeConfigJson')"></button>
+        <button @click="showDataModal=true;loadDataJson()" class="text-sm bg-slate-700/50 text-slate-300 hover:bg-slate-600/50 hover:text-white px-4 py-2 rounded-lg font-medium" x-text="t('seeDataJson')"></button>
+        <button @click="showResetConfirm=true" class="px-4 py-2 bg-red-600/80 hover:bg-red-500 text-white rounded-lg text-sm font-medium" x-text="t('deleteEverything')"></button>
+      </div>
     </div>
   </div>
-  <div class="flex justify-center"><button @click="showConfigModal=true;loadConfig()" class="text-sm bg-slate-700/50 text-slate-300 hover:bg-slate-600/50 hover:text-white px-4 py-2 rounded-lg font-medium" x-text="t('seeConfig')"></button></div>
 </div>
 
 <!-- Routing -->
 <div x-show="tab==='routing'" x-cloak class="space-y-6">
-  <div class="bg-darkCard rounded-xl p-6 shadow-lg border border-slate-700/50">
-    <h2 class="text-xl font-semibold mb-4" x-text="t('geositeCategories')"></h2>
-    <div class="space-y-2">
-      <template x-for="cat in geositeCategories" :key="cat.name">
-        <div class="border border-slate-700/80 rounded-lg overflow-hidden bg-slate-800/20">
-          <button @click="openCategory=openCategory===cat.name?null:cat.name" class="w-full text-left px-4 py-3 bg-slate-800/80 hover:bg-slate-700 text-sm font-medium text-slate-200 flex justify-between items-center transition-colors">
-            <span x-text="t('cat_'+cat.name) || cat.name"></span>
-            <svg class="w-4 h-4 transform transition-transform" :class="openCategory===cat.name?'rotate-180':''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-          </button>
-          <div x-show="openCategory===cat.name" x-collapse class="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            <template x-for="item in cat.items" :key="item">
-              <div class="flex justify-between items-center p-2.5 bg-slate-800/60 rounded border border-slate-700/50 hover:bg-slate-700/50 transition-colors">
-                <div class="flex items-center space-x-2" :title="getGeositeHelp(item)">
-                  <span class="text-xs font-mono text-slate-300" x-text="item"></span>
-                  <svg class="w-3 h-3 text-slate-500 hover:text-slate-300 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                </div>
-                <select x-model="data.routing.geositeRules[item]" @change="toggleGeositeRule(item, data.routing.geositeRules[item])" class="bg-slate-900 border border-slate-600 rounded text-xs text-white px-2 py-1 focus:outline-none focus:border-blue-500">
-                  <option value="proxy" x-text="t('proxy')"></option>
-                  <option value="direct" x-text="t('direct')"></option>
-                  <option value="block" x-text="t('block')"></option>
-                </select>
-              </div>
-            </template>
-          </div>
-        </div>
-      </template>
-    </div>
-  </div>
   <div class="bg-darkCard rounded-xl p-6 shadow-lg border border-slate-700/50">
     <h2 class="text-xl font-semibold mb-4" x-text="t('customRules')"></h2>
     <div class="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-2 mb-4">
@@ -253,10 +233,293 @@
       </table>
     </div>
   </div>
+  <div class="bg-darkCard rounded-xl p-6 shadow-lg border border-slate-700/50">
+    <h2 class="text-xl font-semibold mb-4" x-text="t('geositeCategories')"></h2>
+    <div class="space-y-2">
+      <template x-for="cat in geositeCategories" :key="cat.name">
+        <div class="border border-slate-700/80 rounded-lg overflow-hidden bg-slate-800/20">
+          <button @click="openCategory=openCategory===cat.name?null:cat.name" class="w-full text-left px-4 py-3 bg-slate-800/80 hover:bg-slate-700 text-sm font-medium text-slate-200 flex justify-between items-center transition-colors">
+            <span x-text="t('cat_'+cat.name) || cat.name"></span>
+            <svg class="w-4 h-4 transform transition-transform" :class="openCategory===cat.name?'rotate-180':''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div x-show="openCategory===cat.name" x-collapse class="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <template x-for="item in cat.items" :key="item">
+              <div class="flex justify-between items-center p-2.5 bg-slate-800/60 rounded border border-slate-700/50 hover:bg-slate-700/50 transition-colors">
+                <div class="flex items-center space-x-2" :title="getGeositeHelp(item)">
+                  <span class="text-xs font-mono text-slate-300" x-text="item"></span>
+                  <svg class="w-3 h-3 text-slate-500 hover:text-slate-300 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
+                <select x-model="data.routing.geositeRules[item]" @change="toggleGeositeRule(item, data.routing.geositeRules[item])" class="bg-slate-900 border border-slate-600 rounded text-xs text-white px-2 py-1 focus:outline-none focus:border-blue-500">
+                  <option value="proxy" x-text="t('proxy')"></option>
+                  <option value="direct" x-text="t('direct')"></option>
+                  <option value="block" x-text="t('block')"></option>
+                </select>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
 </div>
 </div>
 
-<!-- Logs Modal -->
+<!-- Router -->
+<div x-show="tab==='router'" x-cloak class="space-y-6">
+  <!-- WiFi Scan (STA client connection) -->
+  <div class="bg-darkCard rounded-xl p-6 shadow-lg border border-slate-700/50">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-xl font-semibold" x-text="t('wifiScan')"></h2>
+      <button @click="scanWifi()" :disabled="scanning" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 rounded-md text-white font-medium" :class="scanning?'opacity-50 cursor-wait':''">
+        <span x-show="scanning" class="inline-block animate-spin mr-1">⟳</span>
+        <span x-text="scanning?t('scanning'):t('scan')"></span>
+      </button>
+    </div>
+
+    <!-- Saved WiFi Networks -->
+    <div class="space-y-3 mb-6">
+      <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider" x-text="t('savedNetworks')||'Saved Networks'"></h3>
+      <template x-for="net in (routerConfig.wifiSTANetworks||[])" :key="net.ssid">
+        <div class="flex items-center justify-between p-4 rounded-lg border transition-colors" 
+             :class="staConnected&&staConnected.ssid===net.ssid ? 'bg-green-900/20 border-green-500/50' : 'bg-slate-800/50 border-slate-700/50 hover:bg-slate-800/80'">
+          <div class="flex items-center space-x-3">
+            <div x-show="staConnected&&staConnected.ssid===net.ssid" x-html="signalIcon(staConnected.signal)"></div>
+            <div x-show="!(staConnected&&staConnected.ssid===net.ssid)">
+              <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/></svg>
+            </div>
+            <div>
+              <div class="font-medium" :class="staConnected&&staConnected.ssid===net.ssid ? 'text-green-300' : 'text-slate-200'" x-text="net.ssid"></div>
+              <div class="text-xs" :class="staConnected&&staConnected.ssid===net.ssid ? 'text-green-400' : 'text-slate-500'" x-text="(net.band==='5g'?'5 GHz':'2.4 GHz')"></div>
+            </div>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button x-show="staConnected&&staConnected.ssid===net.ssid" @click="disconnectSTA()" class="px-3 py-1.5 text-xs bg-red-600/80 hover:bg-red-500 rounded-md text-white font-medium" x-text="t('disconnect')"></button>
+            <button x-show="!(staConnected&&staConnected.ssid===net.ssid)" @click="connectToWifi(net)" class="px-3 py-1.5 text-xs bg-blue-600/80 hover:bg-blue-500 rounded-md text-white font-medium" x-text="t('connect')"></button>
+            <button @click="forgetSTA(net)" class="px-3 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 rounded-md text-white font-medium" x-text="t('forget')"></button>
+          </div>
+        </div>
+      </template>
+      <div x-show="!(routerConfig.wifiSTANetworks&&routerConfig.wifiSTANetworks.length)" class="text-center text-sm text-slate-500 py-4" x-text="t('noSavedWifi')||'No saved networks'"></div>
+    </div>
+
+    <!-- Scan results modal -->
+    <div x-show="showScanModal" x-cloak class="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" @click.self="showScanModal=false">
+      <div class="bg-darkCard rounded-xl border border-slate-700 w-full max-w-xl shadow-2xl overflow-hidden max-h-[80vh] flex flex-col">
+        <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
+          <h3 class="text-lg font-semibold" x-text="t('wifiScan')"></h3>
+          <button @click="showScanModal=false" class="text-slate-400 hover:text-white"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+        </div>
+        <div x-show="scanning" class="flex-1 flex items-center justify-center p-8">
+          <div class="text-center text-slate-400"><span class="inline-block animate-spin mr-2">⟳</span> <span x-text="t('scanning')+'...'"></span></div>
+        </div>
+        <div x-show="!scanning&&scanResults.length>0" class="flex-1 overflow-auto">
+          <table class="w-full text-sm text-left">
+            <thead class="text-xs uppercase bg-slate-800 text-slate-400 sticky top-0">
+              <tr><th class="px-4 py-3"></th><th class="px-4 py-3">SSID</th><th class="px-4 py-3">CH</th><th class="px-4 py-3" x-text="t('encryption')"></th><th class="px-4 py-3" x-text="t('band2')"></th><th class="px-4 py-3 w-20"></th></tr>
+            </thead>
+            <tbody>
+              <template x-for="net in scanResults.slice().sort((a,b)=>(b.signal||0)-(a.signal||0))" :key="net.bssid+net.ssid">
+                <tr class="bg-slate-800/30 border-b border-slate-700/50 hover:bg-slate-800/80 cursor-pointer">
+                  <td class="px-4 py-2" x-html="signalIcon(net.signal)"></td>
+                  <td class="px-4 py-2 font-medium">
+                    <div class="flex items-center space-x-2">
+                      <span x-text="net.ssid||'(hidden)'"></span>
+                      <svg x-show="isRemembered(net.ssid)" class="w-3.5 h-3.5 text-blue-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM9 16a1 1 0 102 0H9z"/></svg>
+                    </div>
+                  </td>
+                  <td class="px-4 py-2 text-xs text-slate-400" x-text="net.channel||'—'"></td>
+                  <td class="px-4 py-2 text-xs" x-text="formatEncryption(net.encryption)"></td>
+                  <td class="px-4 py-2 text-xs font-medium" :class="net.band===5?'text-indigo-400':'text-blue-400'" x-text="net.band===5?'5 GHz':'2.4 GHz'"></td>
+                  <td class="px-4 py-2">
+                    <button @click="connectToWifi(net)" class="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 rounded text-white font-medium" x-text="t('connect')"></button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+        <div x-show="!scanning&&scanResults.length===0" class="flex-1 flex items-center justify-center p-8">
+          <div class="text-center text-slate-500" x-text="t('noScanResults')"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Connect password modal -->
+    <div x-show="showConnectModal" x-cloak class="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" @click.self="showConnectModal=false;connectTarget=null">
+      <div class="bg-darkCard rounded-xl border border-slate-700 w-full max-w-sm p-6 shadow-2xl">
+        <h3 class="text-lg font-semibold mb-2" x-text="t('connectWifi')"></h3>
+        <p class="text-sm text-slate-400 mb-4" x-text="connectTarget?connectTarget.ssid:''"></p>
+        <div x-show="connectEncryption!=='none'" class="mb-4">
+          <label class="text-xs text-slate-400" x-text="t('password')"></label>
+          <input type="password" x-model="connectPassword" @keydown.enter="doConnectWifi()" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" :placeholder="t('enterPassword')">
+        </div>
+        <div class="mb-3">
+          <label class="text-xs text-slate-400" x-text="t('encryption')"></label>
+          <select x-model="connectEncryption" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white">
+            <option value="psk2">WPA2-PSK</option>
+            <option value="psk-mixed">WPA/WPA2 Mixed</option>
+            <option value="sae-mixed">WPA2/WPA3 Mixed</option>
+            <option value="sae">WPA3-SAE</option>
+            <option value="psk">WPA-PSK</option>
+            <option value="none">Open</option>
+          </select>
+        </div>
+        <div class="flex justify-end space-x-3">
+          <button @click="showConnectModal=false;connectTarget=null" class="px-4 py-2 text-slate-400 hover:text-white text-sm" x-text="t('cancel')"></button>
+          <button @click="doConnectWifi()" :disabled="connectingWifi" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+            <span x-show="connectingWifi" class="inline-block animate-spin mr-1">⟳</span>
+            <span x-text="connectingWifi?t('connecting'):t('connect')"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WiFi Configuration -->
+  <div class="bg-darkCard rounded-xl p-6 shadow-lg border border-slate-700/50">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-xl font-semibold" x-text="t('wifiConfig')"></h2>
+      <button @click="loadWifiStatus()" class="px-3 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 rounded-md text-white font-medium" x-text="t('refresh')"></button>
+    </div>
+    <div x-show="!wifiStatus" class="text-center text-slate-500 py-8" x-text="t('loadingWifi')+'...'"></div>
+    <template x-for="radio in wifiRadios" :key="radio.device">
+      <div class="mb-6 last:mb-0">
+        <div class="flex items-center space-x-2 mb-3">
+          <span class="text-lg font-semibold text-slate-200" x-text="radio.band==='2g'?'2.4 GHz':'5 GHz'"></span>
+          <span class="text-xs text-slate-500 font-mono" x-text="radio.device+' CH '+radio.channel+' '+(radio.htmode||'')"></span>
+        </div>
+        <template x-for="iface in radio.ifaces.filter(i=>i.mode==='ap')" :key="iface.section">
+          <div class="bg-slate-800/50 rounded-lg border border-slate-700/50 p-4 mb-3 last:mb-0">
+            <div class="flex items-center justify-between mb-3">
+              <span class="font-medium text-slate-200" x-text="iface.ssid||'—'"></span>
+              <span class="text-xs px-2 py-0.5 rounded" :class="iface.network&&iface.network.includes('lan')?'bg-blue-900/50 text-blue-300':'bg-slate-700 text-slate-400'" x-text="iface.network||'—'"></span>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label class="text-xs text-slate-400">SSID</label>
+                <input type="text" x-model="iface.ssid" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white">
+              </div>
+              <div>
+                <label class="text-xs text-slate-400" x-text="t('password')"></label>
+                <div class="relative">
+                  <input :type="iface._showPwd?'text':'password'" x-model="iface.key" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white pr-8">
+                  <button @click="iface._showPwd=!iface._showPwd" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                    <svg x-show="!iface._showPwd" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                    <svg x-show="iface._showPwd" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.542 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label class="text-xs text-slate-400" x-text="t('encryption')"></label>
+                <select x-model="iface.encryption" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white">
+                  <option value="none">Open</option>
+                  <option value="psk">WPA-PSK</option>
+                  <option value="psk2">WPA2-PSK</option>
+                  <option value="psk-mixed">WPA/WPA2 Mixed</option>
+                  <option value="sae">WPA3-SAE</option>
+                  <option value="sae-mixed">WPA2/WPA3 Mixed</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </template>
+    </template>
+    <div class="flex justify-end mt-4 pt-4 border-t border-slate-700/50">
+      <button @click="saveAllWifi()" :disabled="wifiSavingAll" class="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium disabled:opacity-50" :class="wifiSavingAll?'cursor-wait':''">
+        <span x-show="wifiSavingAll" class="inline-block animate-spin mr-1">⟳</span>
+        <span x-text="t('save')"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Connected Clients -->
+  <div class="bg-darkCard rounded-xl p-6 shadow-lg border border-slate-700/50">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-xl font-semibold" x-text="t('connectedClients')"></h2>
+      <button @click="loadWifiClients()" class="px-3 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 rounded-md text-white font-medium" x-text="t('refresh')"></button>
+    </div>
+    <div x-show="wifiClients.length===0" class="text-center text-slate-500 py-8" x-text="t('noClients')"></div>
+    <div x-show="wifiClients.length>0" class="overflow-x-auto rounded-lg border border-slate-700/50">
+      <table class="w-full text-sm text-left">
+        <thead class="text-xs uppercase bg-slate-800 text-slate-400">
+          <tr><th class="px-4 py-3" x-text="t('deviceName')"></th><th class="px-4 py-3">IP</th><th class="px-4 py-3">MAC</th><th class="px-4 py-3">SSID</th><th class="px-4 py-3" x-text="t('band2')"></th><th class="px-4 py-3" x-text="t('signal')"></th><th class="px-4 py-3 w-16"></th></tr>
+        </thead>
+        <tbody>
+          <template x-for="c in wifiClients" :key="c.mac+c.iface">
+            <tr class="bg-slate-800/30 border-b border-slate-700/50 hover:bg-slate-800/80">
+              <td class="px-4 py-2 text-slate-200 text-sm font-medium" x-text="c.hostname||'—'"></td>
+              <td class="px-4 py-2 font-mono text-xs text-slate-300" x-text="c.ip||'—'"></td>
+              <td class="px-4 py-2 font-mono text-xs" x-text="c.mac"></td>
+              <td class="px-4 py-2 text-slate-300" x-text="c.ssid||'—'"></td>
+              <td class="px-4 py-2 text-xs font-medium" :class="c.band==='5g'?'text-indigo-400':'text-blue-400'" x-text="c.band==='5g'?'5 GHz':'2.4 GHz'"></td>
+              <td class="px-4 py-2" x-html="signalIcon(c.signal)"></td>
+              <td class="px-4 py-2">
+                <button @click="disconnectClient(c)" class="text-xs text-red-400 hover:text-red-300" x-text="t('disconnect')"></button>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Advanced -->
+  <div class="bg-darkCard rounded-xl p-6 shadow-lg border border-slate-700/50">
+    <h2 class="text-xl font-semibold mb-4" x-text="t('advanced')"></h2>
+    <div class="space-y-4">
+      <div>
+        <p class="text-xs text-slate-400 font-medium mb-2" x-text="t('routerPassword')"></p>
+        <div class="flex items-center space-x-2">
+          <input type="password" x-model="newOpenwrtPassword" :placeholder="t('newPassword')" class="flex-1 bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white">
+          <button @click="changeOpenwrtPassword()" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-sm rounded" x-text="t('changePassword')"></button>
+        </div>
+      </div>
+      <div class="flex items-center space-x-3">
+        <button @click="rebootRouter()" :disabled="rebooting" class="px-4 py-2 bg-red-700 hover:bg-red-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+          <span x-show="rebooting" class="inline-block animate-spin mr-1">⟳</span>
+          <span x-text="t('rebootRouter')"></span>
+        </button>
+        <a :href="routerConfig.luciUrl||'http://192.168.1.1'" target="_blank" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium" x-text="t('openLuCI')"></a>
+        <button @click="showRouterConfigModal=true;loadRouterConfigJson()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium" x-text="t('seeRouterJson')"></button>
+      </div>
+    </div>
+  </div>
+  </div>
+</div>
+
+<div class="mt-8 text-center text-xs text-slate-500 pb-4 pt-4">
+  <span x-show="sysinfo.installed"><span x-text="t('currentVersion')"></span> <span class="text-slate-300 font-mono" x-text="sysinfo.version"></span></span>
+  <span x-show="!sysinfo.installed"><span x-text="t('currentVersion')"></span> <span class="text-red-400 font-mono" x-text="t('notInstalled')"></span></span>
+  <button x-show="!sysinfo.installed" @click="installSingbox()" :disabled="installing" class="ml-2 px-2 py-0.5 rounded text-white" :class="installing?'bg-gray-500 cursor-wait':'bg-green-600 hover:bg-green-500'">
+    <span x-show="installing" class="inline-block animate-spin mr-1">⟳</span>
+    <span x-text="installing?t('working'):t('installGuide')"></span>
+  </button>
+  <span class="mx-2">|</span>
+  <span x-show="sysinfo.latestVersion"><span x-text="t('latestVersion')"></span> <a :href="sysinfo.donjuanBaseURL+'/install'" target="_blank" class="text-blue-400 hover:underline font-mono" x-text="sysinfo.latestVersion"></a></span>
+  <span class="mx-2">|</span>
+  <span x-text="t('os')"></span> <span class="text-slate-300" x-text="sysinfo.os"></span>
+  <span class="mx-2">|</span>
+  DonJuan: <span class="text-slate-300 font-mono" x-text="sysinfo.donjuanVersion"></span>
+</div>
+
+</div>
+
+<!-- Router Config Modal -->
+<div x-show="showRouterConfigModal" x-cloak class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" @click.self="showRouterConfigModal=false">
+  <div class="bg-darkCard rounded-xl border border-slate-700 w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl overflow-hidden">
+    <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
+      <h3 class="text-xl font-semibold">router.json</h3>
+      <button @click="showRouterConfigModal=false" class="text-slate-400 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+    </div>
+    <div class="flex-1 overflow-auto p-4 bg-[#0B0F19]">
+      <textarea x-model="routerConfigJsonText" class="w-full h-full min-h-[50vh] bg-slate-800 border border-slate-700 rounded-lg p-4 text-xs text-slate-300 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" spellcheck="false"></textarea>
+    </div>
+    <div class="p-4 border-t border-slate-700 flex justify-end space-x-3">
+      <button @click="showRouterConfigModal=false" class="px-4 py-2 text-slate-400 hover:text-white text-sm" x-text="t('cancel')"></button>
+      <button @click="saveRouterConfigJson()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium" x-text="t('save')"></button>
+    </div>
+  </div>
+</div>
+
 <div x-show="showLogs" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
   <div class="bg-darkCard rounded-xl border border-slate-700 w-full max-w-4xl h-[80vh] flex flex-col shadow-2xl overflow-hidden">
     <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
@@ -371,7 +634,7 @@
 <div x-show="showConfigModal" x-cloak class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" @click.self="showConfigModal=false">
   <div class="bg-darkCard rounded-xl border border-slate-700 w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl overflow-hidden">
     <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
-      <h3 class="text-xl font-semibold" x-text="t('configuration')"></h3>
+      <h3 class="text-xl font-semibold">config.json</h3>
       <button @click="showConfigModal=false" class="text-slate-400 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
     </div>
     <div class="flex-1 overflow-auto p-4 bg-[#0B0F19]">
@@ -380,10 +643,23 @@
       </div>
       <p x-show="!configJson" class="text-sm text-slate-500 text-center py-8" x-text="t('noConfig')"></p>
     </div>
-    <div class="p-4 border-t border-slate-700">
-      <p class="text-xs text-red-400/70 mb-3 text-center" x-text="t('resetWarning')"></p>
-      <div class="flex justify-center space-x-3">
-        <button @click="showConfigModal=false;showResetConfirm=true" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-medium" x-text="t('deleteEverything')"></button>
+  </div>
+</div>
+
+<!-- Data Modal -->
+<div x-show="showDataModal" x-cloak class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" @click.self="showDataModal=false">
+  <div class="bg-darkCard rounded-xl border border-slate-700 w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl overflow-hidden">
+    <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
+      <h3 class="text-xl font-semibold">data.json</h3>
+      <button @click="showDataModal=false" class="text-slate-400 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+    </div>
+    <div class="flex-1 overflow-auto p-4 bg-[#0B0F19]">
+      <textarea x-model="dataJsonText" class="w-full h-full min-h-[50vh] bg-slate-800 border border-slate-700 rounded-lg p-4 text-xs text-slate-300 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" spellcheck="false"></textarea>
+    </div>
+    <div class="p-4 border-t border-slate-700 flex justify-end">
+      <div class="flex space-x-3">
+        <button @click="showDataModal=false" class="px-4 py-2 text-slate-400 hover:text-white text-sm" x-text="t('cancel')"></button>
+        <button @click="saveDataJson()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium" x-text="t('save')"></button>
       </div>
     </div>
   </div>
@@ -395,9 +671,9 @@
     <h3 class="text-xl font-semibold mb-4 text-red-400" x-text="t('areYouSure')"></h3>
     <p class="text-sm text-slate-300 mb-2" x-text="t('willDelete')"></p>
     <ul class="text-sm text-slate-400 mb-4 list-disc list-inside">
-      <li>donjuan-data/data.json (<span x-text="t('allConfigs')"></span>)</li>
-      <li>donjuan-data/config.json (sing-box)</li>
-      <li>donjuan-data/ (<span x-text="t('geodataLogs')"></span>)</li>
+      <li>/etc/donjuan/data.json (<span x-text="t('allConfigs')"></span>)</li>
+      <li>/etc/donjuan/config.json (sing-box)</li>
+      <li>/etc/donjuan/ (<span x-text="t('geodataLogs')"></span>)</li>
     </ul>
     <p class="text-sm text-red-400 font-medium mb-4" x-text="t('cannotUndo')"></p>
     <div class="flex justify-end space-x-3">
@@ -409,18 +685,21 @@
 
 <script>window.__CONFIG_JSON__=/*CONFIG_JSON*/;</script>
 <script>
+const _origFetch=window.fetch;
+window.fetch=function(url,opts={}){if(typeof url==='string'&&url.startsWith('/api/')){const t=localStorage.getItem('openwrt_token');if(t){opts.headers=opts.headers||{};if(opts.headers instanceof Headers){opts.headers.set('Authorization','Bearer '+t)}else{opts.headers['Authorization']='Bearer '+t}}}return _origFetch(url,opts)};
+
 const i18n={
 en:{
 restart:'Restart',running:'Running',stopped:'Stopped',startProxy:'START PROXY',stopProxy:'STOP PROXY',
 servers:'Servers',settings:'Settings',routing:'Routing',
-autoConnect:'Auto Connect',test:'Test',testing:'Testing...',showLogs:'Show Logs',
+autoConnect:'Test all & Start',test:'Test',testAll:'Test all',testAllStart:'Test all & Start',testCurrent:'Test',testing:'Testing...',showLogs:'Show Logs',
 name:'Name',protocol:'Protocol',domain:'Domain',latency:'Latency',
 noServers:'No servers.',noSubServers:'No servers in subscription.',addConfig:'Add Configuration',addSubscription:'Add Subscription',edit:'Edit',updateSub:'Update',editSubscription:'Edit Subscription',subscriptionName:'Name (optional)',subAdded:'subscription added',subUpdated:'subscription updated',subUnsupported:' not supported',
-coreSettings:'Core Settings',panel:'Panel',
+singboxSettings:'Singbox Settings',panel:'Panel',
 currentVersion:'Current Version:',latestVersion:'Latest Version:',notInstalled:'Not installed',
 os:'OS:',installGuide:'Install sing-box',working:'Working...',port:'Port',updatePort:'Update Port',
 portSaved:'Port saved. Restart DonJuan VPN manually to apply.',
-seeConfig:'See Configuration',
+seeConfigJson:'See config.json',seeDataJson:'See data.json',seeRouterJson:'See router.json',
 geositeCategories:'Geosite Categories',customRules:'Custom Rules',
 type:'Type',value:'Value',valuePlaceholder:'Value (e.g. netflix.com)',action:'Action',source:'Source',sourcePlaceholder:'Source (optional)',
 add:'Add',proxy:'Proxy',direct:'Direct',block:'Block',noCustomRules:'No custom rules.',
@@ -450,8 +729,7 @@ node:'Node ',
 'cat_Tech & Dev':'Tech & Dev','cat_Communication & Social':'Communication & Social',
 'cat_E-Commerce':'E-Commerce','cat_Infrastructure':'Infrastructure',
 help_ipv6:'Enable IPv6 routing. Only enable if your ISP supports IPv6 natively.',
-help_fakeIP:'Use FakeIP for DNS resolution. Highly recommended for faster DNS response and routing.',
-help_dnsLeaks:'Prevent DNS leaks by blocking external DNS queries. Recommended: ON.',
+help_dnsLeaks:'Prevent DNS leaks (Slower). A local subnet (e.g. 114.114.114.114/24) should be configured in data.json (settings.clientSubnet) to fetch accurate IPs without leaking.',
 help_routeOnly:'Only apply routing rules without creating a TUN interface. Advanced users only.',
 help_allowInsecure:'Allow insecure connections (skips TLS verification). Often needed for self-signed servers.',
 help_tun:'Create a TUN network interface to capture all device traffic. Required for global proxy.',
@@ -480,18 +758,35 @@ help_saveLogs:'Save log files to disk (data/*.log). When OFF, logs are only kept
 'geo_category-ecommerce-ru':'Russian e-commerce domains','geo_category-vpnservices':'VPN service domains',
 'geo_category-anticensorship':'Anti-censorship tool domains','geo_category-speedtest':'Speed test domains',
 downloadFailed:'Download failed',
+openwrtMode:'Openwrt Mode',help_openwrtMode:'Enable OpenWrt router management. Adds a Router tab for WiFi configuration and shows connected clients. Requires authentication.',
+router:'Router',loginMsg:'Enter password to access DonJuan VPN',login:'Login',password:'Password',
+wifiConfig:'WiFi Configuration',wifiScan:'WiFi Scan',connectedClients:'Connected Clients',
+channel:'Channel',htmode:'HT Mode',encryption:'Encryption',disabled:'Disabled',enabled:'Enabled',
+saveWifi:'Save',scanning:'Scanning...',scan:'Scan',band:'Band',band2:'Band',
+allBands:'All Bands',noScanResults:'No networks found. Click Scan to search.',
+loadingWifi:'Loading WiFi configuration',noClients:'No connected clients',
+disconnect:'Disconnect',defaultPassword:'Default password:',
+hostname:'Host',noWifiConnected:'Not connected to a WiFi network.',
+connectWifi:'Connect to WiFi',
+openwrtModeEnabled:'OpenWrt Mode enabled! Router tab is now available.',
+newPassword:'New password',changePassword:'Change Password',routerPassword:'Router Password',
+loginError:'Invalid password',loginLoading:'Logging in...',
+logout:'Logout',
+connect:'Connect',forget:'Forget',connectedToWifi:'Connected to WiFi',remembered:'Remembered',
+enterPassword:'Enter WiFi password',connecting:'Connecting...',
+advanced:'Advanced',rebootRouter:'Reboot Router',openLuCI:'Open LuCI',deviceName:'Device Name',
 },
 es:{
 restart:'Reiniciar',running:'Activo',stopped:'Detenido',startProxy:'INICIAR PROXY',stopProxy:'DETENER PROXY',
 servers:'Servidores',settings:'Ajustes',routing:'Enrutamiento',
-autoConnect:'Auto Conectar',test:'Probar',testing:'Probando...',showLogs:'Ver Logs',
+autoConnect:'Probar todos e iniciar',test:'Probar',testAll:'Probar todos',testAllStart:'Probar todos e iniciar',testCurrent:'Probar',testing:'Probando...',showLogs:'Ver Logs',
 name:'Nombre',protocol:'Protocolo',domain:'Dominio',latency:'Latencia',
 noServers:'Sin servidores.',noSubServers:'Sin servidores en la suscripción.',addConfig:'Agregar Configuración',addSubscription:'Agregar Suscripción',edit:'Editar',updateSub:'Actualizar',editSubscription:'Editar Suscripción',subscriptionName:'Nombre (opcional)',subAdded:'suscripción agregada',subUpdated:'suscripción actualizada',subUnsupported:' no soportado',
-coreSettings:'Ajustes Core',panel:'Panel',
+singboxSettings:'Ajustes Singbox',panel:'Panel',
 currentVersion:'Versión actual:',latestVersion:'Última versión:',notInstalled:'No instalado',
 os:'SO:',installGuide:'Instalar sing-box',working:'Trabajando...',port:'Puerto',updatePort:'Actualizar Puerto',
 portSaved:'Puerto guardado. Reinicie DonJuan VPN para aplicar.',
-seeConfig:'Ver Configuración',
+seeConfigJson:'Ver config.json',seeDataJson:'Ver data.json',seeRouterJson:'Ver router.json',
 geositeCategories:'Categorías Geosite',customRules:'Reglas Personalizadas',
 type:'Tipo',value:'Valor',valuePlaceholder:'Valor (ej. netflix.com)',action:'Acción',source:'Origen',sourcePlaceholder:'Origen (opcional)',
 add:'Agregar',proxy:'Proxy',direct:'Directo',block:'Bloquear',noCustomRules:'Sin reglas personalizadas.',
@@ -521,8 +816,7 @@ node:'Nodo ',
 'cat_Tech & Dev':'Tecnología y Desarrollo','cat_Communication & Social':'Comunicación y Social',
 'cat_E-Commerce':'Comercio Electrónico','cat_Infrastructure':'Infraestructura',
 help_ipv6:'Habilitar enrutamiento IPv6. Solo habilitar si su ISP soporta IPv6 nativamente.',
-help_fakeIP:'Usar FakeIP para resolución DNS. Muy recomendado para respuesta DNS más rápida.',
-help_dnsLeaks:'Prevenir fugas DNS bloqueando consultas externas. Recomendado: ON.',
+help_dnsLeaks:'Prevenir fugas DNS (Más lento). Configurar una subred local (ej. 114.114.114.114/24) en data.json (settings.clientSubnet) para obtener IPs precisas sin fugas.',
 help_routeOnly:'Solo aplicar reglas de enrutamiento sin crear interfaz TUN. Solo usuarios avanzados.',
 help_allowInsecure:'Permitir conexiones inseguras (omite verificación TLS). Necesario para servidores self-signed.',
 help_tun:'Crear interfaz TUN para capturar todo el tráfico. Requerido para proxy global.',
@@ -547,18 +841,35 @@ help_saveLogs:'Guardar archivos de log en disco (data/*.log). Cuando está OFF, 
 'geo_category-ecommerce-ru':'Dominios de comercio electrónico ruso','geo_category-vpnservices':'Dominios de servicios VPN',
 'geo_category-anticensorship':'Dominios de herramientas anti-censura','geo_category-speedtest':'Dominios de prueba de velocidad',
 downloadFailed:'Descarga fallida',
+openwrtMode:'Modo Openwrt',help_openwrtMode:'Habilitar gestión de router OpenWrt. Agrega una pestaña Router para configurar WiFi y ver clientes conectados. Requiere autenticación.',
+router:'Router',loginMsg:'Ingrese la contraseña para acceder a DonJuan VPN',login:'Iniciar sesión',password:'Contraseña',
+wifiConfig:'Configuración WiFi',wifiScan:'Escaneo WiFi',connectedClients:'Clientes Conectados',
+channel:'Canal',htmode:'Modo HT',encryption:'Cifrado',disabled:'Desactivado',enabled:'Activado',
+saveWifi:'Guardar',scanning:'Escaneando...',scan:'Escanear',band:'Banda',band2:'Banda',
+allBands:'Todas las bandas',noScanResults:'No se encontraron redes. Haga clic en Escanear.',
+loadingWifi:'Cargando configuración WiFi',noClients:'No hay clientes conectados',
+disconnect:'Desconectar',defaultPassword:'Contraseña por defecto:',
+hostname:'Host',noWifiConnected:'No conectado a una red WiFi.',
+connectWifi:'Conectar a WiFi',
+openwrtModeEnabled:'¡Modo OpenWrt habilitado! Pestaña Router disponible.',
+newPassword:'Nueva contraseña',changePassword:'Cambiar Contraseña',routerPassword:'Contraseña del Router',
+loginError:'Contraseña inválida',loginLoading:'Iniciando sesión...',
+logout:'Cerrar sesión',
+connect:'Conectar',forget:'Olvidar',connectedToWifi:'Conectado a WiFi',remembered:'Recordada',
+enterPassword:'Ingrese contraseña WiFi',connecting:'Conectando...',
+advanced:'Avanzado',rebootRouter:'Reiniciar router',openLuCI:'Abrir LuCI',deviceName:'Nombre del dispositivo',
 },
 zh:{
 restart:'重启',running:'运行中',stopped:'已停止',startProxy:'启动代理',stopProxy:'停止代理',
 servers:'服务器',settings:'设置',routing:'路由',
-autoConnect:'自动连接',test:'测试',testing:'测试中...',showLogs:'查看日志',
+autoConnect:'测试并启动',test:'测试',testAll:'测试全部',testAllStart:'测试全部并启动',testCurrent:'测试',testing:'测试中...',showLogs:'查看日志',
 name:'名称',protocol:'协议',domain:'域名',latency:'延迟',
 noServers:'暂无服务器。',noSubServers:'订阅中暂无服务器。',addConfig:'添加配置',addSubscription:'添加订阅',edit:'编辑',updateSub:'更新',editSubscription:'编辑订阅',subscriptionName:'名称（可选）',subAdded:'订阅已添加',subUpdated:'订阅已更新',subUnsupported:' 不支持',
-coreSettings:'核心设置',panel:'面板',
+singboxSettings:'Singbox 设置',panel:'面板',
 currentVersion:'当前版本:',latestVersion:'最新版本:',notInstalled:'未安装',
 os:'系统:',installGuide:'安装 sing-box',working:'处理中...',port:'端口',updatePort:'更新端口',
 portSaved:'端口已保存。请手动重启 DonJuan VPN 以生效。',
-seeConfig:'查看配置',
+seeConfigJson:'查看 config.json',seeDataJson:'查看 data.json',seeRouterJson:'查看 router.json',
 geositeCategories:'Geosite 分类',customRules:'自定义规则',
 type:'类型',value:'值',valuePlaceholder:'值 (如 netflix.com)',action:'动作',source:'来源',sourcePlaceholder:'来源 (可选)',
 add:'添加',proxy:'代理',direct:'直连',block:'拦截',noCustomRules:'暂无自定义规则。',
@@ -588,8 +899,7 @@ node:'节点 ',
 'cat_Tech & Dev':'技术与开发','cat_Communication & Social':'通讯与社交',
 'cat_E-Commerce':'电子商务','cat_Infrastructure':'基础设施',
 help_ipv6:'启用 IPv6 路由。仅在您的 ISP 原生支持 IPv6 时启用。',
-help_fakeIP:'使用 FakeIP 进行 DNS 解析。强烈推荐以获得更快的 DNS 响应和路由。',
-help_dnsLeaks:'通过阻止外部 DNS 查询来防止 DNS 泄漏。建议：开启。',
+help_dnsLeaks:'防止 DNS 泄漏（较慢）。应在 data.json (settings.clientSubnet) 中配置本地子网（例如 114.114.114.114/24）以获取准确的 IP 而不泄漏。',
 help_routeOnly:'仅应用路由规则而不创建 TUN 接口。仅限高级用户。',
 help_allowInsecure:'允许不安全连接（跳过 TLS 验证）。自签名代理服务器通常需要。',
 help_tun:'创建 TUN 网络接口以捕获所有设备流量。全局代理必需。',
@@ -614,18 +924,34 @@ help_saveLogs:'将日志文件保存到磁盘（data/*.log）。关闭时，日�
 'geo_category-ecommerce-ru':'俄罗斯电商域名','geo_category-vpnservices':'VPN 服务域名',
 'geo_category-anticensorship':'反审查工具域名','geo_category-speedtest':'测速域名',
 downloadFailed:'下载失败',
-},
+openwrtMode:'Openwrt 模式',help_openwrtMode:'启用 OpenWrt 路由器管理。添加 Router 选项卡用于 WiFi 配置和查看连接的客户端。需要身份验证。',
+router:'路由器',loginMsg:'输入密码以访问 DonJuan VPN',login:'登录',password:'密码',
+wifiConfig:'WiFi 配置',wifiScan:'WiFi 扫描',connectedClients:'已连接客户端',
+channel:'信道',htmode:'HT 模式',encryption:'加密',disabled:'已禁用',enabled:'已启用',
+saveWifi:'保存',scanning:'扫描中...',scan:'扫描',band:'频段',band2:'频段',
+allBands:'所有频段',noScanResults:'未找到网络。点击扫描。',
+loadingWifi:'正在加载 WiFi 配置',noClients:'没有连接的客户端',
+disconnect:'断开',defaultPassword:'默认密码：',
+hostname:'主机名',noWifiConnected:'未连接到 WiFi 网络。',
+connectWifi:'连接到 WiFi',
+openwrtModeEnabled:'OpenWrt 模式已启用！Router 选项卡已可用。',
+newPassword:'新密码',changePassword:'修改密码',routerPassword:'路由器密码',
+loginError:'密码错误',loginLoading:'登录中...',
+logout:'退出',
+connect:'连接',forget:'忘记',connectedToWifi:'已连接WiFi',remembered:'已记住',
+enterPassword:'输入WiFi密码',connecting:'连接中...',
+advanced:'高级',rebootRouter:'重启路由器',openLuCI:'打开 LuCI',deviceName:'设备名称',},
 ru:{
 restart:'Перезапуск',running:'Работает',stopped:'Остановлен',startProxy:'ЗАПУСТИТЬ ПРОКСИ',stopProxy:'ОСТАНОВИТЬ ПРОКСИ',
 servers:'Серверы',settings:'Настройки',routing:'Маршрутизация',
-autoConnect:'Автоподключение',test:'Тест',testing:'Тестирование...',showLogs:'Журнал',
+autoConnect:'Проверить все и запустить',test:'Тест',testAll:'Тест всех',testAllStart:'Тест всех и запуск',testCurrent:'Тест',testing:'Тестирование...',showLogs:'Журнал',
 name:'Имя',protocol:'Протокол',domain:'Домен',latency:'Задержка',
 noServers:'Нет серверов.',noSubServers:'Нет серверов в подписке.',addConfig:'Добавить конфигурацию',addSubscription:'Добавить подписку',edit:'Изменить',updateSub:'Обновить',editSubscription:'Изменить подписку',subscriptionName:'Имя (необязательно)',subAdded:'подписка добавлена',subUpdated:'подписка обновлена',subUnsupported:' не поддерживается',
-coreSettings:'Основные настройки',panel:'Панель',
+singboxSettings:'Настройки Singbox',panel:'Панель',
 currentVersion:'Текущая версия:',latestVersion:'Последняя версия:',notInstalled:'Не установлен',
 os:'ОС:',installGuide:'Установить sing-box',working:'Обработка...',port:'Порт',updatePort:'Обновить порт',
 portSaved:'Порт сохранён. Перезапустите DonJuan VPN для применения.',
-seeConfig:'Просмотр конфигурации',
+seeConfigJson:'Просмотр config.json',seeDataJson:'Просмотр data.json',seeRouterJson:'Просмотр router.json',
 geositeCategories:'Категории Geosite',customRules:'Пользовательские правила',
 type:'Тип',value:'Значение',valuePlaceholder:'Значение (напр. netflix.com)',action:'Действие',source:'Источник',sourcePlaceholder:'Источник (необязательно)',
 add:'Добавить',proxy:'Прокси',direct:'Напрямую',block:'Блокировать',noCustomRules:'Нет пользовательских правил.',
@@ -655,8 +981,7 @@ node:'Узел ',
 'cat_Tech & Dev':'Технологии и разработка','cat_Communication & Social':'Общение и соцсети',
 'cat_E-Commerce':'Электронная коммерция','cat_Infrastructure':'Инфраструктура',
 help_ipv6:'Включить IPv6 маршрутизацию. Включайте только если ваш ISP поддерживает IPv6.',
-help_fakeIP:'Использовать FakeIP для разрешения DNS. Настоятельно рекомендуется для ускорения DNS.',
-help_dnsLeaks:'Предотвратить утечки DNS, блокируя внешние запросы. Рекомендуется: ВКЛ.',
+help_dnsLeaks:'Предотвратить утечки DNS (Медленнее). В data.json (settings.clientSubnet) должна быть настроена локальная подсеть (напр. 114.114.114.114/24).',
 help_routeOnly:'Только применять правила маршрутизации без создания TUN интерфейса. Для опытных пользователей.',
 help_allowInsecure:'Разрешить небезопасные соединения (пропускает проверку TLS). Часто нужно для самоподписанных серверов.',
 help_tun:'Создать TUN интерфейс для перехвата всего трафика. Обязательно для глобального прокси.',
@@ -681,19 +1006,42 @@ help_saveLogs:'Сохранять логи на диск (data/*.log). Когд�
 'geo_category-ecommerce-ru':'Российские домены электронной коммерции','geo_category-vpnservices':'Домены VPN сервисов',
 'geo_category-anticensorship':'Домены анти-цензуры','geo_category-speedtest':'Домены тестов скорости',
 downloadFailed:'Ошибка загрузки',
-}
+openwrtMode:'Режим Openwrt',help_openwrtMode:'Управление роутером OpenWrt. Добавляет вкладку Router для настройки WiFi и просмотра подключённых клиентов. Требует аутентификацию.',
+router:'Роутер',loginMsg:'Введите пароль для доступа к DonJuan VPN',login:'Войти',password:'Пароль',
+wifiConfig:'Настройка WiFi',wifiScan:'Сканирование WiFi',connectedClients:'Подключённые клиенты',
+channel:'Канал',htmode:'Режим HT',encryption:'Шифрование',disabled:'Отключено',enabled:'Включено',
+saveWifi:'Сохранить',scanning:'Сканирование...',scan:'Сканировать',band:'Диапазон',band2:'Диапазон',
+allBands:'Все диапазоны',noScanResults:'Сети не найдены. Нажмите Сканировать.',
+loadingWifi:'Загрузка конфигурации WiFi',noClients:'Нет подключённых клиентов',
+disconnect:'Отключить',defaultPassword:'Пароль по умолчанию:',
+hostname:'Имя хоста',noWifiConnected:'Не подключено к сети WiFi.',
+connectWifi:'Подключиться к WiFi',
+openwrtModeEnabled:'Режим OpenWrt включён! Вкладка Router доступна.',
+newPassword:'Новый пароль',changePassword:'Сменить пароль',routerPassword:'Пароль роутера',
+loginError:'Неверный пароль',loginLoading:'Вход...',
+logout:'Выйти',
+connect:'Подключить',forget:'Забыть',connectedToWifi:'Подключено к WiFi',remembered:'Запомнена',
+enterPassword:'Введите пароль WiFi',connecting:'Подключение...',
+advanced:'Дополнительно',rebootRouter:'Перезагрузить роутер',openLuCI:'Открыть LuCI',deviceName:'Имя устройства',}
 };
 
 document.addEventListener('alpine:init',()=>{
 Alpine.data('app',()=>({
-  tab:'servers',running:false,showLogs:false,showAddModal:false,showEditModal:false,showResetConfirm:false,showConfigModal:false,showSubModal:false,showEditSubModal:false,installing:false,busy:false,autoTesting:false,testing:false,subLoading:false,subUpdating:null,openSubscription:null,
+  tab:'servers',running:false,showLogs:false,showAddModal:false,showEditModal:false,showResetConfirm:false,showConfigModal:false,showDataModal:false,showSubModal:false,showEditSubModal:false,showRouterConfigModal:false,installing:false,busy:false,autoTesting:false,testing:false,testingCurrent:false,subLoading:false,subUpdating:null,openSubscription:null,
+  showOpenwrtBanner:false,newOpenwrtPassword:'',
+  wifiStatus:null,wifiRadios:[],wifiClients:[],scanResults:[],scanning:false,scanBand:'all',wifiSaving:'',
+  showScanModal:false,showConnectModal:false,connectTarget:null,connectPassword:'',connectEncryption:'psk2',connectingWifi:false,
+  staConnected:null,
+  clientsInterval:null,rebooting:false,dataJsonText:'',routerConfigJsonText:'',
+  routerConfig:{password:'donjuan',luciUrl:'http://192.168.1.1',radioDevices:['radio0','radio1'],radioBands:{radio0:'2g',radio1:'5g'}},
   logs:[],newNodeUrl:'',newNodeRemarks:'',newSubName:'',newSubUrl:'',editNode:null,editSub:null,editNodeSubId:null,selectedNode:'auto',configJson:'',
   logFilters:{dir:'',protocol:'',domain:''},
   notif:'',notifType:'info',notifTimer:null,
-  sysinfo:{version:'',latestVersion:'',installed:false,os:''},
+  wifiSavingAll:false,updatingPort:false,
+  sysinfo:{version:'',latestVersion:'',installed:false,os:'',donjuanVersion:'',donjuanBaseURL:''},
   data:{
-    settings:{ipv6:false,fakeIP:true,dnsLeaks:false,routeOnly:false,allowInsecure:false,tun:true,autoRedirect:false,sniffing:true,localNetwork:true,saveLogs:false,language:'en'},
-    port:8080,
+    settings:{ipv6:false,fakeIP:true,dnsLeaks:false,routeOnly:false,allowInsecure:false,tun:true,autoRedirect:false,sniffing:true,localNetwork:true,saveLogs:false,language:'en',openwrtMode:false},
+    port:8888,
     routing:{customRules:[],geositeRules:{}},
     nodes:[],selectedNode:'auto'
   },
@@ -716,7 +1064,7 @@ Alpine.data('app',()=>({
   t(key){const lang=this.data.settings.language||'en';return(i18n[lang]&&i18n[lang][key])||(i18n.en[key])||key;},
 
   getSettingLabel(key){
-    const m={tun:'TUN',autoRedirect:'Auto Redirect',fakeIP:'Fake IP',dnsLeaks:'DNS Leaks',routeOnly:'Route Only',allowInsecure:'Allow Insecure',localNetwork:'Local Network',saveLogs:'Save Logs',ipv6:'IPv6',sniffing:'Sniffing'};
+    const m={tun:'TUN',autoRedirect:'Auto Redirect',fakeIP:'Fake IP',dnsLeaks:'DNS Leaks',routeOnly:'Route Only',allowInsecure:'Allow Insecure',localNetwork:'Local Network',saveLogs:'Save Logs',ipv6:'IPv6',sniffing:'Sniffing',openwrtMode:'Openwrt Mode'};
     return m[key]||this.t(key)||key.replace(/([A-Z])/g,' $1').trim();
   },
 
@@ -726,9 +1074,12 @@ Alpine.data('app',()=>({
     this.notifTimer=setTimeout(()=>{this.notif=''},4000);
   },
 
-  async init(){
+async init(){
     this.loadConfig();
-    await this.loadData();
+    try {
+      await this.loadData();
+    } catch(e) {}
+    await this.loadRouterConfig();
     await this.loadSysinfo();
     await this.checkLatestVersion();
     await this.checkStatus();
@@ -736,13 +1087,235 @@ Alpine.data('app',()=>({
       if(v){this.fetchLogs();this.connInterval=setInterval(()=>this.fetchLogs(),2000)}
       else{clearInterval(this.connInterval)}
     });
+    this.$watch('tab',v=>{
+      if(v==='router'){this.loadWifiStatus();this.loadWifiClients();this.startClientsRefresh()}
+      else{this.stopClientsRefresh()}
+    });
     setInterval(()=>this.checkStatus(),3000);
     setInterval(()=>this.checkLatestVersion(),86400000);
   },
 
+async openwrtLogout(){
+    // Only clear the session — do NOT turn off openwrtMode
+    try{await fetch('/api/openwrt/logout',{method:'POST'});}catch(e){}
+    localStorage.removeItem('openwrt_token');
+    document.cookie='openwrt_token=;path=/;max-age=0';
+    window.location.reload();
+  },
+
+  onSettingChange(key){
+    if(key==='openwrtMode'){
+      if(this.data.settings.openwrtMode){
+        this.showOpenwrtBanner=true;
+        this.saveData().then(async()=>{
+          await this.autoOpenwrtLogin();
+          this.showNotif(this.t('openwrtModeEnabled'));
+          this.showOpenwrtBanner=false;
+        });
+      }else{
+        localStorage.removeItem('openwrt_token');
+        document.cookie='openwrt_token=;path=/;max-age=0';
+        this.saveData();
+      }
+    }else{
+      this.saveData();
+    }
+  },
+
+  async autoOpenwrtLogin(){
+    const pwd=this.routerConfig.password||'donjuan';
+    try{
+      const r=await fetch('/api/openwrt/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pwd})});
+      if(r.ok){const d=await r.json();localStorage.setItem('openwrt_token',d.token);}
+    }catch(e){}
+  },
+
+  async changeOpenwrtPassword(){
+    if(!this.newOpenwrtPassword)return;
+    try{
+      const headers={'Content-Type':'application/json'};
+      const token=localStorage.getItem('openwrt_token');
+      if(token)headers['Authorization']='Bearer '+token;
+      const r=await fetch('/api/openwrt/change-password',{method:'POST',headers,body:JSON.stringify({password:this.newOpenwrtPassword})});
+      if(r.ok){this.showNotif(this.t('configUpdated'));this.newOpenwrtPassword='';await this.loadRouterConfig();}
+      else{this.showNotif(this.t('loginError'),'error');}
+    }catch(e){this.showNotif(this.t('loginError'),'error');}
+  },
+
+  formatEncryption(enc){
+    if(!enc)return'—';
+    if(!enc.enabled)return'Open';
+    const parts=[];
+    if(enc.wpa){const v=enc.wpa.map(w=>w===1?'WPA':w===2?'WPA2':w===3?'WPA3':'WPA'+w);parts.push(v.join('/'))}
+    if(enc.authentication){parts.push(enc.authentication.join('/').toUpperCase())}
+    if(enc.ciphers){parts.push(enc.ciphers.join('+').toUpperCase())}
+    return parts.join(' ')||'Encrypted';
+  },
+
+  async loadWifiStatus(){
+    try{
+      const headers={};const token=localStorage.getItem('openwrt_token');
+      if(token)headers['Authorization']='Bearer '+token;
+      const r=await fetch('/api/openwrt/status',{headers});
+      if(!r.ok){this.wifiStatus=null;return;}
+      this.wifiStatus=await r.json();
+      this.wifiRadios=[];
+      this.staConnected=null;
+      for(const[device,radio] of Object.entries(this.wifiStatus)){
+        const config=radio.config||{};
+        const ifaces=(radio.interfaces||[]).map(i=>{
+          const cfg=i.config||{};
+          return {section:i.section||'',ifname:i.ifname||'',ssid:cfg.ssid||'',key:cfg.key||'',encryption:cfg.encryption||'psk2',network:(cfg.network||[]).join(', '),hidden:cfg.hidden||false,mode:cfg.mode||'ap',_showPwd:false};
+        });
+        for(const iface of ifaces){
+          if(iface.mode==='sta'){
+            this.staConnected={ssid:iface.ssid,band:config.band||'2g',device,signal:null,encryption:iface.encryption};
+          }
+        }
+        this.wifiRadios.push({device,band:config.band||'2g',channel:config.channel||'auto',htmode:config.htmode||'HT40',disabled:radio.disabled||false,up:radio.up||false,ifaces:ifaces.filter(i=>i.mode!=='sta')});
+      }
+    }catch(e){}
+  },
+
+  async saveAllWifi(){
+    this.wifiSavingAll=true;
+    try{
+      const headers={'Content-Type':'application/json'};const token=localStorage.getItem('openwrt_token');
+      if(token)headers['Authorization']='Bearer '+token;
+      let bodyRadios=[];
+      let bodyIfaces=[];
+      for(const radio of this.wifiRadios){
+        bodyRadios.push({device:radio.device,channel:radio.channel,htmode:radio.htmode,disabled:radio.disabled});
+        for(const iface of radio.ifaces){
+          bodyIfaces.push({section:iface.section,ssid:iface.ssid,key:iface.key,encryption:iface.encryption,hidden:iface.hidden});
+        }
+      }
+      const body={radios:bodyRadios,ifaces:bodyIfaces};
+      const r=await fetch('/api/openwrt/wifi-save',{method:'POST',headers,body:JSON.stringify(body)});
+      if(r.ok){this.showNotif(this.t('configUpdated'))}else{this.showNotif(this.t('failedStart'),'error')}
+    }catch(e){this.showNotif(this.t('loginError'),'error')}
+    this.wifiSavingAll=false;
+  },
+
+  updatePort() {
+    this.updatingPort=true;
+    this.showNotif(this.t('working'));
+    this.saveData().then(() => {
+      setTimeout(() => {
+        this.showNotif(this.t('portSaved'));
+        this.updatingPort=false;
+      }, 5000);
+    }).catch(()=>{
+      this.updatingPort=false;
+    });
+  },
+
+  async scanWifi(){
+    this.scanning=true;this.scanResults=[];this.showScanModal=true;
+    try{
+      const headers={'Content-Type':'application/json'};const token=localStorage.getItem('openwrt_token');
+      if(token)headers['Authorization']='Bearer '+token;
+      const r=await fetch('/api/openwrt/wifi-scan',{method:'POST',headers,body:JSON.stringify({})});
+      if(r.ok){const d=await r.json();this.scanResults=d.results||[];}
+      else{this.showNotif(this.t('downloadFailed'),'error')}
+    }catch(e){this.showNotif(this.t('loginError'),'error')}
+    this.scanning=false;
+  },
+
+  signalIcon(dbm){
+    const s=dbm||0;
+    const color=s>-50?'#4ade80':s>-60?'#a3e635':s>-70?'#facc15':s>-80?'#f97316':'#ef4444';
+    const bars=s>-50?4:s>-60?3:s>-70?2:s>-80?1:0;
+    const paths=[];
+    for(let i=0;i<4;i++){
+      const h=i<bars?5+i*4:3;
+      const y=18-h;
+      paths.push(`<rect x="${2+i*5}" y="${y}" width="3.5" height="${h}" rx="1" fill="${i<bars?color:'#475569'}"/>`);
+    }
+    return `<svg class="w-5 h-5 inline-block" viewBox="0 0 24 24">${paths.join('')}</svg>`;
+  },
+
+  isRemembered(ssid){
+    if(!ssid)return false;
+    return (this.routerConfig.wifiSTANetworks||[]).some(n=>n.ssid===ssid);
+  },
+
+  connectToWifi(net){
+    if(this.isRemembered(net.ssid)){
+      const saved=(this.routerConfig.wifiSTANetworks||[]).find(n=>n.ssid===net.ssid);
+      this.connectWifiSTA(net, saved.key, saved.encryption);
+    } else {
+      this.connectTarget=net;
+      this.connectPassword='';
+      this.connectEncryption='psk2';
+      if(net.encryption&&net.encryption.enabled===false) this.connectEncryption='none';
+      this.showScanModal=false;
+      this.showConnectModal=true;
+    }
+  },
+
+  async doConnectWifi(){
+    if(!this.connectTarget)return;
+    this.connectingWifi=true;
+    await this.connectWifiSTA(this.connectTarget, this.connectPassword, this.connectEncryption);
+    this.connectingWifi=false;
+  },
+
+  async connectWifiSTA(net, key, encryption){
+    const band=net.band===5?'5g':'2g';
+    try{
+      const headers={'Content-Type':'application/json'};const token=localStorage.getItem('openwrt_token');
+      if(token)headers['Authorization']='Bearer '+token;
+      const r=await fetch('/api/openwrt/wifi-connect',{method:'POST',headers,body:JSON.stringify({ssid:net.ssid,key,encryption,band})});
+      if(r.ok){this.showNotif(this.t('connectedToWifi')+': '+net.ssid);this.showConnectModal=false;this.showScanModal=false;this.connectTarget=null;this.loadWifiStatus();}
+      else{const err=await r.text();this.showNotif(this.t('failedStart')+': '+err,'error');}
+    }catch(e){this.showNotif(this.t('loginError'),'error')}
+  },
+
+  async disconnectSTA(){
+    try{
+      const headers={'Content-Type':'application/json'};const token=localStorage.getItem('openwrt_token');
+      if(token)headers['Authorization']='Bearer '+token;
+      const r=await fetch('/api/openwrt/wifi-disconnect',{method:'POST',headers,body:JSON.stringify({})});
+      if(r.ok){this.staConnected=null;this.showNotif(this.t('proxyStopped'));this.loadWifiStatus();}
+    }catch(e){}
+  },
+
+  async forgetSTA(net){
+    try{
+      const headers={'Content-Type':'application/json'};const token=localStorage.getItem('openwrt_token');
+      if(token)headers['Authorization']='Bearer '+token;
+      await fetch('/api/openwrt/wifi-forget',{method:'POST',headers,body:JSON.stringify({ssid:net.ssid})});
+      this.staConnected=null;
+      await this.loadRouterConfig();
+      this.loadWifiStatus();
+    }catch(e){}
+  },
+
+  async loadWifiClients(){
+    try{
+      const headers={};const token=localStorage.getItem('openwrt_token');
+      if(token)headers['Authorization']='Bearer '+token;
+      const r=await fetch('/api/openwrt/wifi-clients',{headers});
+      if(r.ok){const d=await r.json();this.wifiClients=d.clients||[];}
+    }catch(e){}
+  },
+
+  startClientsRefresh(){this.stopClientsRefresh();this.clientsInterval=setInterval(()=>this.loadWifiClients(),5000)},
+  stopClientsRefresh(){if(this.clientsInterval){clearInterval(this.clientsInterval);this.clientsInterval=null}},
+
+  async disconnectClient(client){
+    try{
+      const headers={'Content-Type':'application/json'};const token=localStorage.getItem('openwrt_token');
+      if(token)headers['Authorization']='Bearer '+token;
+      await fetch('/api/openwrt/disconnect-client',{method:'POST',headers,body:JSON.stringify({iface:client.iface,mac:client.mac})});
+      this.loadWifiClients();
+    }catch(e){}
+  },
+
   async checkStatus(){if(this.busy)return;try{const r=await fetch('/api/status');if(r.ok){this.running=(await r.json()).running;if(this.running&&!this.sysinfo.latestVersion)this.checkLatestVersion();}}catch(e){}},
 
-  async loadSysinfo(){try{const r=await fetch('/api/sysinfo');if(r.ok){const d=await r.json();this.sysinfo.version=d.version;this.sysinfo.installed=d.installed;this.sysinfo.os=d.os;}}catch(e){}},
+  async loadSysinfo(){try{const r=await fetch('/api/sysinfo');if(r.ok){const d=await r.json();this.sysinfo.version=d.version;this.sysinfo.installed=d.installed;this.sysinfo.os=d.os;this.sysinfo.donjuanVersion=d.donjuanVersion;this.sysinfo.donjuanBaseURL=d.donjuanBaseURL;}}catch(e){}},
 
   async checkLatestVersion(){
     try{
@@ -770,7 +1343,20 @@ Alpine.data('app',()=>({
   },
 
   async loadData(){
-    const res=await fetch('/api/data');
+    const headers={};const token=localStorage.getItem('openwrt_token');if(token)headers['Authorization']='Bearer '+token;
+    const res=await fetch('/api/data',{headers});
+    if(res.status===401){
+      if(this.data.settings.openwrtMode){
+        localStorage.removeItem('openwrt_token');
+        document.cookie='openwrt_token=;path=/;max-age=0';
+        await this.autoOpenwrtLogin();
+        if(localStorage.getItem('openwrt_token')){
+          return this.loadData();
+        }
+        this.data.settings.openwrtMode=false;
+      }
+      return;
+    }
     if(res.ok){
       const p=await res.json();
       if(p&&p.settings){
@@ -779,8 +1365,9 @@ Alpine.data('app',()=>({
         if(!this.data.subscriptions)this.data.subscriptions=[];
         if(!this.data.routing.customRules)this.data.routing.customRules=[];
         if(!this.data.routing.geositeRules)this.data.routing.geositeRules={};
-        if(!this.data.port)this.data.port=8080;
+        if(!this.data.port)this.data.port=8888;
         if(!this.data.settings.language)this.data.settings.language='en';
+        if(!this.data.wifiSTANetworks)this.data.wifiSTANetworks=[];
 
         this.geositeCategories.forEach(cat => cat.items.forEach(item => {
           if(!this.data.routing.geositeRules[item]) this.data.routing.geositeRules[item]='proxy';
@@ -845,8 +1432,15 @@ Alpine.data('app',()=>({
     this.showNotif(this.t('cleaningUp'));
     fetch('/api/restart-ui').then(()=>{
       this.running=false;
+      // Clear session and reload to show login page
+      localStorage.removeItem('openwrt_token');
+      document.cookie='openwrt_token=;path=/;max-age=0';
+      setTimeout(()=>window.location.reload(),3000);
     }).catch(()=>{
       this.running=false;
+      localStorage.removeItem('openwrt_token');
+      document.cookie='openwrt_token=;path=/;max-age=0';
+      setTimeout(()=>window.location.reload(),3000);
     });
   },
 
@@ -1007,6 +1601,72 @@ Alpine.data('app',()=>({
     try{await fetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(this.data)})}catch(e){}
   },
 
+  async testCurrentLatency(){
+    const node=this.data.nodes.find(n=>n.id===this.selectedNode)||this.data.subscriptions.flatMap(s=>s.nodes).find(n=>n.id===this.selectedNode);
+    if(!node){this.showNotif(this.t('noServer'),'error');return;}
+    this.testingCurrent=true;
+    try{
+      const r=await fetch('/api/test-latency?id='+encodeURIComponent(node.id)+'&url='+encodeURIComponent(node.url));
+      if(r.ok){const d=await r.json();node.latency=d.ms>0?d.ms:-1;this.showNotif(node.remarks+': '+(d.ms>0?d.ms+'ms':this.t('failedStart')));}
+      else{this.showNotif(this.t('failedStart'),'error');}
+    }catch(e){this.showNotif(this.t('failedStart'),'error');}
+    this.testingCurrent=false;
+    try{await fetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(this.data)})}catch(e){}
+  },
+
+  async rebootRouter(){
+    this.rebooting=true;this.showNotif(this.t('cleaningUp'));
+    try{await fetch('/api/reboot-router',{method:'POST'});}catch(e){}
+    this.rebooting=false;
+  },
+
+  async loadDataJson(){
+    try{
+      const r=await fetch('/api/data');
+      if(r.ok){
+        const d=await r.json();
+        this.dataJsonText=JSON.stringify(d,null,2);
+      }
+    }catch(e){this.dataJsonText='Error loading data.json';}
+  },
+
+  async saveDataJson(){
+    try{
+      const d=JSON.parse(this.dataJsonText);
+      await fetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+      this.showNotif(this.t('configUpdated'));
+      this.showDataModal=false;
+      await this.loadData();
+    }catch(e){this.showNotif('Invalid JSON','error');}
+  },
+
+  async loadRouterConfig(){
+    try{
+      const r=await fetch('/api/router-config');
+      if(r.ok){this.routerConfig=await r.json();}
+    }catch(e){}
+  },
+
+  async loadRouterConfigJson(){
+    try{
+      const r=await fetch('/api/router-config');
+      if(r.ok){
+        const d=await r.json();
+        this.routerConfigJsonText=JSON.stringify(d,null,2);
+      }
+    }catch(e){this.routerConfigJsonText='Error loading router.json';}
+  },
+
+  async saveRouterConfigJson(){
+    try{
+      const d=JSON.parse(this.routerConfigJsonText);
+      await fetch('/api/router-config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+      this.showNotif(this.t('configUpdated'));
+      this.showRouterConfigModal=false;
+      await this.loadRouterConfig();
+    }catch(e){this.showNotif('Invalid JSON','error');}
+  },
+
   async resetEverything(){
     this.showResetConfirm=false;
     this.showNotif(this.t('resetWarning'));
@@ -1026,7 +1686,8 @@ Alpine.data('app',()=>({
       autoRedirect:this.t('help_autoRedirect'),
       sniffing:this.t('help_sniffing'),
       localNetwork:this.t('help_localNetwork'),
-      saveLogs:this.t('help_saveLogs')
+      saveLogs:this.t('help_saveLogs'),
+      openwrtMode:this.t('help_openwrtMode')
     };
     return h[key]||'';
   },
@@ -1084,7 +1745,7 @@ Alpine.data('app',()=>({
           protocol=pMatch[2];
       }
 
-      const sm=line.match(/from ([\d\.]+:\d+)/);
+      const sm=line.match(/from (\S+)/);
       if(sm) source=sm[1];
 
       const dm=line.match(/to ([\w\.-]+:\d+)/);

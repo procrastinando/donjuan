@@ -24,20 +24,21 @@ func generateSingboxConfig(data AppData, selectedNodeID string) ([]byte, error) 
 		"timestamp": true,
 	}
 
-	// DNS
+	remoteDNS := map[string]interface{}{
+		"tag":    "remote-dns",
+		"type":   "tls",
+		"server": "8.8.8.8",
+	}
+	directDNS := map[string]interface{}{
+		"tag":    "direct-dns",
+		"type":   "https",
+		"server": "223.5.5.5",
+	}
+	
+	servers := []interface{}{remoteDNS, directDNS}
+
 	dns := map[string]interface{}{
-		"servers": []interface{}{
-			map[string]interface{}{
-				"tag":    "remote-dns",
-				"type":   "udp",
-				"server": "8.8.8.8",
-			},
-			map[string]interface{}{
-				"tag":    "direct-dns",
-				"type":   "udp",
-				"server": "223.5.5.5",
-			},
-		},
+		"servers":           servers,
 		"independent_cache": true,
 		"strategy":          "ipv4_only",
 	}
@@ -67,16 +68,61 @@ func generateSingboxConfig(data AppData, selectedNodeID string) ([]byte, error) 
 			proxyServerDomains = append(proxyServerDomains, u.Hostname())
 		}
 	}
-	// Add DNS rule: resolve proxy server domains via direct-dns to avoid loops
+	// Add proxy server IPs/hostnames to direct routing (prevents TUN routing loop)
+	var dnsRules []interface{}
 	if len(proxyServerDomains) > 0 {
-		dnsRules, _ := dns["rules"].([]interface{})
-		if dnsRules == nil {
-			dnsRules = []interface{}{}
-		}
 		dnsRules = append(dnsRules, map[string]interface{}{
 			"domain_suffix": proxyServerDomains,
 			"server":        "direct-dns",
 		})
+	}
+
+	subnet := data.Settings.ClientSubnet
+	if subnet == "" {
+		subnet = "114.114.114.114/24"
+	}
+
+	hasCNRules := fileExists("/etc/donjuan/geosite-geolocation-cn.srs") && fileExists("/etc/donjuan/geosite-geolocation-!cn.srs") && fileExists("/etc/donjuan/geoip-cn.srs")
+
+	if hasCNRules {
+		// Documentation standard rules for DNS
+		dnsRules = append(dnsRules, map[string]interface{}{
+			"rule_set": "geosite-geolocation-cn",
+			"server":   "direct-dns",
+		})
+
+		leakRule := map[string]interface{}{
+			"type": "logical",
+			"mode": "and",
+			"rules": []interface{}{
+				map[string]interface{}{"rule_set": "geosite-geolocation-!cn", "invert": true},
+				map[string]interface{}{"rule_set": "geoip-cn"},
+			},
+		}
+		if data.Settings.DNSLeaks {
+			// Slower, secure
+			leakRule["server"] = "remote-dns"
+			leakRule["client_subnet"] = subnet
+		} else {
+			// Faster, leaks
+			leakRule["server"] = "direct-dns"
+		}
+		dnsRules = append(dnsRules, leakRule)
+	} else {
+		// Fallback if rule sets are not downloaded
+		fallbackRule := map[string]interface{}{}
+		if data.Settings.DNSLeaks {
+			fallbackRule["server"] = "remote-dns"
+			fallbackRule["client_subnet"] = subnet
+		} else {
+			fallbackRule["server"] = "direct-dns"
+		}
+		dnsRules = append(dnsRules, fallbackRule)
+	}
+
+	if dns["rules"] != nil {
+		dns["rules"] = append(dns["rules"].([]interface{}), dnsRules...)
+	} else {
 		dns["rules"] = dnsRules
 	}
 
@@ -169,7 +215,7 @@ func generateSingboxConfig(data AppData, selectedNodeID string) ([]byte, error) 
 
 	// Route
 	route := map[string]interface{}{
-		"default_domain_resolver": "remote-dns",
+		"default_domain_resolver": "direct-dns",
 		"auto_detect_interface":   true,
 	}
 	var rules []interface{}
@@ -181,6 +227,10 @@ func generateSingboxConfig(data AppData, selectedNodeID string) ([]byte, error) 
 	rules = append(rules, map[string]interface{}{
 		"protocol": "dns",
 		"action":   "hijack-dns",
+	})
+	rules = append(rules, map[string]interface{}{
+		"ip_cidr":  []string{"223.5.5.5/32"},
+		"outbound": "direct",
 	})
 	if data.Settings.LocalNetwork {
 		rules = append(rules, map[string]interface{}{
@@ -235,11 +285,30 @@ func generateSingboxConfig(data AppData, selectedNodeID string) ([]byte, error) 
 
 	// Geosite/GeoIP direct routing rules
 	var ruleSets []interface{}
+	
+	if hasCNRules {
+		ruleSets = append(ruleSets, map[string]interface{}{
+			"type":   "local",
+			"tag":    "geosite-geolocation-cn",
+			"format": "binary",
+			"path":   "/etc/donjuan/geosite-geolocation-cn.srs",
+		}, map[string]interface{}{
+			"type":   "local",
+			"tag":    "geosite-geolocation-!cn",
+			"format": "binary",
+			"path":   "/etc/donjuan/geosite-geolocation-!cn.srs",
+		}, map[string]interface{}{
+			"type":   "local",
+			"tag":    "geoip-cn",
+			"format": "binary",
+			"path":   "/etc/donjuan/geoip-cn.srs",
+		})
+	}
 
 	for key, action := range data.Routing.GeositeRules {
 		action = strings.ToLower(action)
 		if action == "direct" || action == "block" {
-			geositeFile := fmt.Sprintf("donjuan-data/geosite-%s.srs", key)
+			geositeFile := fmt.Sprintf("/etc/donjuan/geosite-%s.srs", key)
 			if fileExists(geositeFile) {
 				tag := "geosite-" + key
 				rules = append(rules, map[string]interface{}{

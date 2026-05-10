@@ -120,7 +120,7 @@ chmod +x /etc/init.d/donjuan
 
 ### 5. Configure DonJuan
 
-1. Open **http://<ROUTER_IP>:8080** in your browser
+1. Open **http://<ROUTER_IP>:8888** in your browser
 2. Enable **TUN** and **Auto Redirect** in Core Settings
 3. **Auto Redirect** uses nftables to redirect LAN traffic through the TUN interface — this is required on OpenWrt and works automatically with fw4
 
@@ -158,9 +158,10 @@ Everything else is created at runtime:
 | File | Created When | Purpose |
 |---|---|---|
 | `data.json` | First run | UI state, server configs, routing rules, language preference |
+| `router.json` | First OpenWrt run | OpenWrt specific state (WiFi networks, passwords) |
 | `config.json` | On start proxy | Generated sing-box configuration |
 | `data/` | On geodata download | Cached `.srs` rule sets |
-| `data/*.log` | When save logs is ON | Daily log files |
+| `/tmp/*.log` | When save logs is ON | Temporal log files to avoid flash wear |
 
 ### Start
 
@@ -168,11 +169,11 @@ Everything else is created at runtime:
 sudo ./donjuan
 ```
 
-Open **http://127.0.0.1:8080** in your browser.
+Open **http://127.0.0.1:8888** in your browser.
 
 ### Port
 
-Default port is `8080`. Change it in **Settings > Panel** then restart.
+Default port is `8888`. Change it in **Settings > Advanced** then restart.
 
 ## DNS Architecture
 
@@ -186,7 +187,7 @@ When TUN is active, all DNS traffic is hijacked by sing-box and routed through t
 ## Multi-Language
 
 Supported languages: English, Español, 中文, Русский.
-Select in **Settings > Panel**. The choice is saved in `data.json` and persists across restarts.
+Select in **Settings > Advanced**. The choice is saved in `data.json` and persists across restarts.
 
 ## FAQ
 
@@ -194,7 +195,7 @@ Select in **Settings > Panel**. The choice is saved in `data.json` and persists 
 No. The `donjuan` binary is statically compiled and self-contained. Go is only needed if you want to build from source.
 
 **How do I update sing-box?**
-Settings > Panel > enter a version number > click Update Version.
+Go to footer, if an update is available click the version link.
 
 **Why doesn't TOR work on a fresh install?**
 Make sure these defaults are ON in Core Settings: **TUN**, **Fake IP**, **Sniffing**, **Local Network**. These are enabled by default. If they were turned off at any point (saved in `data.json`), delete `data.json` and restart to restore defaults.

@@ -43,8 +43,8 @@ func writeToLogFile(entry string) {
 		if currentLogFile != nil {
 			currentLogFile.Close()
 		}
-os.MkdirAll("donjuan-data", 0755)
-	f, err := os.OpenFile(fmt.Sprintf("donjuan-data/%s.log", today), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+		os.MkdirAll("/etc/donjuan", 0755)
+		f, err := os.OpenFile(fmt.Sprintf("/tmp/donjuan-%s.log", today), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 		if err != nil {
 			return
 		}
@@ -88,11 +88,15 @@ func getSingboxVersion() string {
 	return ""
 }
 
-// killAllSingbox is the nuclear option — kills ALL sing-box processes system-wide
+// killAllSingbox sends SIGTERM first, then SIGKILL as fallback
 func killAllSingbox() {
 	if runtime.GOOS == "windows" {
 		exec.Command("taskkill", "/F", "/IM", "sing-box.exe").Run()
 	} else {
+		// SIGTERM first for graceful cleanup of routes/nftables
+		exec.Command("pkill", "-15", "-f", "sing-box").Run()
+		time.Sleep(2 * time.Second)
+		// SIGKILL any survivors
 		exec.Command("pkill", "-9", "-f", "sing-box").Run()
 	}
 }
@@ -105,23 +109,71 @@ func removeTUN() {
 	}
 }
 
+// cleanupRouting removes leftover routing rules and nftables chains that
+// sing-box creates with auto_route/strict_route. Without this cleanup,
+// stopping sing-box leaves traffic routed into a dead TUN = network blackhole.
+func cleanupRouting() {
+	if runtime.GOOS == "windows" {
+		return
+	}
+
+	// Remove ip rules pointing to sing-box routing tables (typically 9000-9003)
+	for _, table := range []string{"9000", "9001", "9002", "9003"} {
+		for i := 0; i < 5; i++ {
+			if err := exec.Command("ip", "rule", "del", "table", table).Run(); err != nil {
+				break
+			}
+		}
+		exec.Command("ip", "route", "flush", "table", table).Run()
+	}
+
+	// Clean up nftables chains created by sing-box
+	out, err := exec.Command("nft", "list", "tables").Output()
+	if err == nil {
+		for _, line := range strings.Split(string(out), "\n") {
+			line = strings.TrimSpace(line)
+			if strings.Contains(line, "sing-box") || strings.Contains(line, "singbox") {
+				// e.g., "table inet sing-box" → delete it
+				parts := strings.Fields(line)
+				if len(parts) >= 3 {
+					exec.Command("nft", "delete", parts[0], parts[1], parts[2]).Run()
+				}
+			}
+		}
+	}
+
+	// Flush any remaining sing-box iptables rules (legacy fallback)
+	exec.Command("iptables", "-t", "mangle", "-F").Run()
+	exec.Command("iptables", "-t", "mangle", "-X").Run()
+
+	addLog("Routing cleanup completed (ip rules, nftables, iptables)")
+}
+
 func startSingbox() error {
 	processMu.Lock()
 	defer processMu.Unlock()
 
 	// ALWAYS do a full cleanup before starting, regardless of state
 	if singboxCmd != nil && singboxCmd.Process != nil {
-		singboxCmd.Process.Kill()
-		singboxCmd.Wait()
+		singboxCmd.Process.Signal(os.Interrupt) // SIGTERM
+		done := make(chan struct{})
+		go func() { singboxCmd.Wait(); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+			singboxCmd.Process.Kill()
+			singboxCmd.Wait()
+		}
 	}
 	killAllSingbox()
 	time.Sleep(300 * time.Millisecond)
+	cleanupRouting()
 	removeTUN()
 	time.Sleep(200 * time.Millisecond)
 	singboxCmd = nil
 
 	cmdPath := findSingbox()
-	cmd := exec.Command(cmdPath, "run", "-c", "donjuan-data/config.json")
+	cmd := exec.Command(cmdPath, "run", "-c", "/etc/donjuan/config.json")
 
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
@@ -144,36 +196,54 @@ func startSingbox() error {
 	}()
 
 	go func() {
-		cmd.Wait()
+		err := cmd.Wait()
+		if err != nil {
+			addLog("sing-box exited with error: " + err.Error())
+		} else {
+			addLog("sing-box exited cleanly")
+		}
 		processMu.Lock()
 		singboxCmd = nil
 		processMu.Unlock()
+
+		// Always ensure routing is cleaned up when process dies,
+		// otherwise traffic is blackholed into a dead TUN interface!
+		time.Sleep(500 * time.Millisecond)
+		cleanupRouting()
+		removeTUN()
 	}()
 
 	return nil
 }
 
 func stopSingboxLocked() {
-	// First try graceful kill of tracked process
+	// First try graceful shutdown via SIGTERM (allows sing-box to clean up routes)
 	if singboxCmd != nil && singboxCmd.Process != nil {
-		singboxCmd.Process.Kill()
+		singboxCmd.Process.Signal(os.Interrupt) // SIGTERM / SIGINT
 		done := make(chan struct{})
 		go func() { singboxCmd.Wait(); close(done) }()
 		select {
 		case <-done:
-		case <-time.After(2 * time.Second):
+			addLog("sing-box stopped gracefully")
+		case <-time.After(5 * time.Second):
+			singboxCmd.Process.Kill()
+			singboxCmd.Wait()
+			addLog("sing-box force-killed after timeout")
 		}
 	}
 
 	// Nuclear fallback: kill ALL sing-box processes
 	killAllSingbox()
-	time.Sleep(300 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
+
+	// Clean up any leftover routing rules/nftables from strict_route/auto_route
+	cleanupRouting()
 
 	// Clean TUN interface
 	removeTUN()
 
 	singboxCmd = nil
-	addLog("sing-box stopped and TUN cleaned")
+	addLog("sing-box stopped and routing cleaned")
 }
 
 func stopSingbox() error {
@@ -191,6 +261,7 @@ func forceCleanup() {
 	// Extra: kill any remaining sing-box
 	killAllSingbox()
 	time.Sleep(500 * time.Millisecond)
+	cleanupRouting()
 	removeTUN()
 
 	// Flush DNS
@@ -199,5 +270,5 @@ func forceCleanup() {
 	} else if runtime.GOOS == "linux" {
 		exec.Command("resolvectl", "flush-caches").Run()
 	}
-	addLog("Force cleanup completed — all sing-box processes killed, TUN removed, DNS flushed")
+	addLog("Force cleanup completed — all sing-box processes killed, routes cleaned, TUN removed, DNS flushed")
 }

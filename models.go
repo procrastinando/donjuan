@@ -1,5 +1,13 @@
 package main
 
+type RouterConfig struct {
+	Password     string            `json:"password"`
+	LuciURL      string            `json:"luciUrl"`
+	RadioDevices []string          `json:"radioDevices"`
+	RadioBands   map[string]string `json:"radioBands"`
+	WifiSTANetworks []WifiSTANetwork `json:"wifiSTANetworks"`
+}
+
 type AppData struct {
 	Settings struct {
 		IPv6          bool   `json:"ipv6"`
@@ -13,6 +21,8 @@ type AppData struct {
 		LocalNetwork  bool   `json:"localNetwork"`
 		SaveLogs      bool   `json:"saveLogs"`
 		Language      string `json:"language"`
+		OpenwrtMode   bool   `json:"openwrtMode"`
+		ClientSubnet  string `json:"clientSubnet"`
 	} `json:"settings"`
 	Port    int `json:"port"`
 	Routing struct {
@@ -23,6 +33,13 @@ type AppData struct {
 	Subscriptions []Subscription `json:"subscriptions"`
 	SelectedNode  string         `json:"selectedNode"`
 	ProxyRunning  bool           `json:"proxyRunning"`
+}
+
+type WifiSTANetwork struct {
+	SSID       string `json:"ssid"`
+	Key        string `json:"key"`
+	Encryption string `json:"encryption"`
+	Band       string `json:"band"`
 }
 
 type Subscription struct {

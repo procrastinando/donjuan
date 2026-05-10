@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- 
+      Material Design Rose Icon
+      Strict adherence to flat UI, completely transparent background, and NO whites.
+      The overlapping tech tunnels are created using precisely nested, non-intersecting 
+      thick strokes that naturally form transparent gaps (pure negative space).
+    -->
+  </defs>
+
+  <!-- STEM & NETWORK NODE (Emerald Green) -->
+  <!-- Stem -->
+  <path d="M 256 420 L 256 460" 
+        stroke="#00B074" 
+        stroke-width="24" 
+        stroke-linecap="round" 
+        fill="none" />
+
+  <!-- 
+    Proxy Network Node (Base)
+    Uses a compound path with the evenodd fill rule to create a truly transparent 
+    inner tech hole without using any white shapes or masks.
+  -->
+  <path fill-rule="evenodd" 
+        d="M 256 440 A 36 36 0 1 0 256 512 A 36 36 0 1 0 256 440 Z M 256 462 A 14 14 0 1 1 256 490 A 14 14 0 1 1 256 462 Z" 
+        fill="#00B074" />
+
+  <!-- SEPAL / BASE LEAVES (Emerald Green) -->
+  <!-- 
+    A geometric, Material Design cup that cradles the rose blossom.
+    Tightly bounds the bottom edge to anchor the tech tunnels.
+  -->
+  <path d="M 60 340 
+           C 110 380, 160 380, 190 360 
+           C 220 420, 292 420, 322 360 
+           C 352 380, 402 380, 452 340 
+           C 412 410, 332 450, 256 450 
+           C 180 450, 100 410, 60 340 Z" 
+        fill="#00B074" />
+
+  <!-- ROSE BLOSSOM / TECH TUNNELS (Ruby Red) -->
+  <g stroke="#E0115F" stroke-width="52" stroke-linecap="round" fill="none">
+    
+    <!-- 
+      Tunnel 1: Outer Right Petal
+      Sweeps from the bottom center, bulges right to form the cheek, and wraps over the top.
+    -->
+    <path d="M 200 300 C 480 380, 540 140, 380 60 C 300 20, 180 10, 100 60" />
+
+    <!-- 
+      Tunnel 2: Outer Left Petal
+      Sweeps from the top left, bulges left to form the cheek, and tucks perfectly into the sepal.
+    -->
+    <path d="M 80 140 C -40 280, 60 400, 200 340 C 260 320, 330 300, 350 250" />
+
+    <!-- 
+      Tunnel 3: Inner Core Bud
+      Starts where Tunnel 2 ends, swirling into the very center to complete the rose spiral.
+    -->
+    <path d="M 320 180 C 370 80, 220 40, 160 100 C 100 160, 130 280, 210 270 C 280 260, 280 190, 240 160" />
+    
+  </g>
+</svg>
